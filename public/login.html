@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DONE · Acceder</title>
+  <meta name="description" content="Accede a DONE" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/login.css" />
+</head>
+<link rel="icon" type="image/png" href="/assets/img/ticklogo.png">
+<body class="page">
+  <header class="topbar">
+    <div class="container topbar__inner">
+      <a class="brand brand--logo-only" href="/">
+        <img class="brand__logo" src="/assets/img/logo.png" alt="DONE" />
+      </a>
+      <nav class="topbar__nav">
+        <a class="toplink" href="/">Inicio</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="auth">
+    <div class="container auth__grid">
+      <section class="panel">
+        <h1>Entra y convierte chats en tareas.</h1>
+        <p>DONE une conversación, tareas y archivos para que el equipo ejecute sin perseguirse.</p>
+
+        <div class="bullets">
+          <div class="bullet">
+            <div class="bullet__icon">🟢</div>
+            <div>
+              <div class="bullet__t">Tareas dentro del chat</div>
+              <div class="bullet__d">Responsable, estado y seguimiento, sin salir de la conversación.</div>
+            </div>
+          </div>
+          <div class="bullet">
+            <div class="bullet__icon">📌</div>
+            <div>
+              <div class="bullet__t">Dashboard claro</div>
+              <div class="bullet__d">Pendientes, hechas y archivadas. Cero caos.</div>
+            </div>
+          </div>
+          <div class="bullet">
+            <div class="bullet__icon">📎</div>
+            <div>
+              <div class="bullet__t">Archivos y contexto</div>
+              <div class="bullet__d">Los documentos viven junto a lo que hay que hacer.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="cardLogin">
+        <h2 id="title">Acceder</h2>
+        <div class="hint" id="hint">Usa tu email y contraseña. Si eres admin, verás el panel automáticamente.</div>
+
+        <!-- ✅ Nombre (solo en registro) -->
+        <div class="field" id="nameField" style="display:none;">
+          <div class="label">Nombre y Apellidos</div>
+          <div class="inputWrap">
+            <input class="input" id="name" placeholder="Tu nombre" autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="label">Email</div>
+          <div class="inputWrap">
+            <input class="input" id="email" placeholder="tu@email.com"
+              autocomplete="off" autocapitalize="none" spellcheck="false" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="label">Contraseña</div>
+          <div class="inputWrap">
+            <input class="input" id="password" type="password" placeholder="••••••••" autocomplete="off" />
+            <button class="togglePass" id="togglePass" type="button">Ver</button>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn--primary btn--lg" id="btn" type="button">Entrar</button>
+          <div class="msg" id="msg"></div>
+        </div>
+
+        <div class="mini" id="forgotRow">
+          <span>¿Olvidaste la contraseña?</span>
+          <a class="link" href="#" id="forgot">Recuperar</a>
+        </div>
+
+        <!-- ✅ Toggle login/registro -->
+        <div class="mini">
+          <a class="link" href="#" id="toggleMode">No tengo cuenta</a>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/api.js" defer></script>
+  <script src="/login.js" defer></script>
+</body>
+</html>

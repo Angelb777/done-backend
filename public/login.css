@@ -1,0 +1,146 @@
+/* public/login.css */
+.auth{
+  padding: 34px 0 60px;
+}
+.auth__grid{
+  display:grid;
+  grid-template-columns: 1.05fr .95fr;
+  gap: 18px;
+  align-items: stretch;
+}
+.panel{
+  background: rgba(255,255,255,.88);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: var(--shadow2);
+  padding: 18px;
+  position: relative;
+  overflow:hidden;
+}
+.panel h1{
+  margin:0;
+  font-size: 34px;
+  line-height:1.08;
+  letter-spacing:-.4px;
+}
+.panel p{
+  margin:10px 0 0;
+  color: rgba(15,23,42,.72);
+  line-height: 1.5;
+  max-width: 56ch;
+}
+.bullets{
+  margin-top: 16px;
+  display:grid;
+  gap:10px;
+}
+.bullet{
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  padding:12px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.85);
+}
+.bullet__icon{
+  width:34px;height:34px;border-radius:12px;
+  display:grid;place-items:center;
+  background: rgba(22,129,54,.10);
+}
+.bullet__t{ font-weight:950; }
+.bullet__d{ color: rgba(15,23,42,.70); font-size: 14px; margin-top:2px; }
+
+.cardLogin{
+  background: rgba(255,255,255,.92);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: var(--shadow2);
+  padding: 18px;
+}
+.cardLogin h2{
+  margin:0;
+  font-size: 18px;
+  letter-spacing: -.2px;
+}
+.hint{
+  margin-top:6px;
+  color: rgba(15,23,42,.65);
+  font-size: 13px;
+  line-height:1.4;
+}
+.field{
+  margin-top: 12px;
+  display:grid;
+  gap: 8px;
+}
+.label{
+  font-size: 13px;
+  font-weight: 900;
+  color: rgba(15,23,42,.75);
+}
+.inputWrap{
+  position:relative;
+}
+.input{
+  width:100%;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.9);
+  padding: 12px 12px;
+  font-size: 14px;
+  outline: none;
+  transition: box-shadow .15s ease, border-color .15s ease;
+}
+.input:focus{
+  border-color: rgba(22,129,54,.35);
+  box-shadow: 0 0 0 6px rgba(22,129,54,.10);
+}
+.togglePass{
+  position:absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.85);
+  border-radius: 999px;
+  padding: 7px 10px;
+  cursor:pointer;
+  font-weight: 900;
+  font-size: 12px;
+  color: rgba(15,23,42,.75);
+}
+.actions{
+  display:flex;
+  gap: 10px;
+  align-items:center;
+  justify-content: space-between;
+  margin-top: 14px;
+  flex-wrap:wrap;
+}
+.msg{
+  font-size: 13px;
+  color: rgba(15,23,42,.65);
+  min-height: 18px;
+}
+.msg.error{ color: #b42318; font-weight: 800; }
+.msg.ok{ color: rgba(22,129,54,1); font-weight: 900; }
+
+.mini{
+  display:flex; gap:10px; align-items:center;
+  margin-top: 10px;
+  color: rgba(15,23,42,.62);
+  font-size: 13px;
+}
+.link{
+  color: rgba(15,23,42,.85);
+  font-weight: 900;
+  text-decoration:none;
+  border-bottom: 1px solid rgba(15,23,42,.18);
+}
+.link:hover{ border-bottom-color: rgba(15,23,42,.35); }
+
+@media (max-width: 900px){
+  .auth__grid{ grid-template-columns: 1fr; }
+  .panel{ display:none; }
+}

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DONE · Chat</title>
+
+  <!-- ✅ CSP: permite previews blob: (imagenes locales antes de subir) -->
+  <meta http-equiv="Content-Security-Policy"
+    content="
+      default-src 'self';
+      script-src 'self';
+      style-src 'self' 'unsafe-inline';
+      connect-src 'self';
+      img-src 'self' data: blob:;
+      media-src 'self' blob:;
+      font-src 'self';
+      object-src 'none';
+      base-uri 'self';
+      frame-ancestors 'self';
+    "
+  />
+
+  <link rel="icon" type="image/png" href="/assets/img/ticklogo.png">
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+
+<body>
+
+  <!-- TOP BAR CHAT -->
+<div class="topbar topbar-chat">
+  <div class="topbar-left">
+    <button class="iconbtn" id="backBtn" title="Volver">←</button>
+  </div>
+
+  <div class="topbar-center">
+    <button
+      class="chat-title-btn"
+      id="chatTitleBtn"
+      type="button"
+      title="Ver archivos"
+    >
+      <span id="chatTitle">Chat</span>
+    </button>
+  </div>
+
+  <div class="topbar-right">
+    <button class="iconbtn" id="buzzBtn" title="Zumbido">🔔</button>
+    <button class="btn outline" id="logout">Salir</button>
+  </div>
+</div>
+
+  <div class="shell chat-shell">
+    <div id="chatState" class="state"></div>
+
+    <!-- LIST -->
+    <div id="messages" class="chat-list"></div>
+
+    <!-- attachments bar -->
+    <div id="attachBar" class="attachbar hidden"></div>
+
+    <!-- composer -->
+    <div class="composer">
+      <input type="file" id="fileInput" multiple hidden />
+
+      <button class="iconbtn" id="clipBtn" title="Adjuntar">📎</button>
+      <button class="iconbtn" id="taskBtn" title="Tarea">＋</button>
+
+      <textarea
+        id="textInput"
+        class="composer-input"
+        rows="1"
+        placeholder="Escribe un mensaje…"
+      ></textarea>
+
+      <button class="btn primary" id="sendBtn" title="Enviar">➤</button>
+    </div>
+  </div>
+
+  <!-- image modal -->
+  <div class="imgmodal hidden" id="imgModal">
+    <div class="imgmodal-top">
+      <button class="iconbtn" id="imgOpen" title="Abrir en nueva pestaña">↗</button>
+      <button class="iconbtn" id="imgClose" title="Cerrar">✕</button>
+    </div>
+    <div class="imgmodal-body">
+      <img id="imgModalEl" alt="imagen" />
+    </div>
+  </div>
+
+  <script src="/api.js" defer></script>
+  <script src="/chat.js" defer></script>
+</body>
+</html>

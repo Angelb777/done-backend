@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DONE · Admin</title>
+  <link rel="icon" type="image/png" href="/assets/img/ticklogo.png">
+  <link rel="stylesheet" href="/styles.css" />
+
+  <style>
+    :root{
+      --done-green:#168136;
+      --bg:#f6f7f2;
+      --card:#ffffff;
+      --muted:#6b7280;
+      --text:#0f172a;
+      --line:#e5e7eb;
+      --danger:#b91c1c;
+      --warn:#b45309;
+      --shadow: 0 10px 30px rgba(2,6,23,.08);
+      --radius: 18px;
+    }
+    body{ background:var(--bg); color:var(--text); }
+
+    /* Layout */
+    .admin-wrap{ max-width:1200px; margin:0 auto; padding:18px; }
+    .topbar{
+      position:sticky; top:0; z-index:50;
+      background:rgba(246,247,242,.88); backdrop-filter: blur(10px);
+      border-bottom:1px solid var(--line);
+    }
+    .topbar-inner{
+      max-width:1200px; margin:0 auto; padding:14px 18px;
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+    }
+    .brand{
+      display:flex; align-items:center; gap:12px; min-width: 220px;
+    }
+    .brand img{ height:34px; width:auto; }
+    .brand .title{ display:flex; flex-direction:column; line-height:1.1; }
+    .brand .title b{ font-size:15px; }
+    .brand .title span{ font-size:12px; color:var(--muted); }
+
+    /* Tabs */
+    .tabs{
+      display:flex; gap:8px; flex-wrap:wrap;
+      align-items:center; justify-content:center;
+    }
+    .tabbtn{
+      border:1px solid var(--line);
+      background:#fff;
+      padding:9px 12px;
+      border-radius:999px;
+      cursor:pointer;
+      font-weight:700;
+      font-size:13px;
+      display:flex;
+      gap:8px;
+      align-items:center;
+      box-shadow: 0 1px 0 rgba(0,0,0,.02);
+    }
+    .tabbtn.active{
+      border-color: rgba(22,129,54,.35);
+      box-shadow: 0 6px 18px rgba(22,129,54,.12);
+      outline: 2px solid rgba(22,129,54,.15);
+    }
+    .tabbtn .dot{
+      width:8px; height:8px; border-radius:999px; background:var(--line);
+    }
+    .tabbtn.active .dot{ background: var(--done-green); }
+
+    /* Cards / grid */
+    .grid{
+      display:grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap:14px;
+      margin-top:16px;
+    }
+    .cardx{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding:16px;
+    }
+    .col-12{ grid-column: span 12; }
+    .col-8{ grid-column: span 8; }
+    .col-4{ grid-column: span 4; }
+    .col-6{ grid-column: span 6; }
+    @media (max-width: 980px){
+      .col-8,.col-4,.col-6{ grid-column: span 12; }
+      .brand{ min-width:auto; }
+    }
+
+    .kpis{ display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; }
+    @media (max-width: 980px){ .kpis{ grid-template-columns: repeat(2, 1fr);} }
+    @media (max-width: 520px){ .kpis{ grid-template-columns: 1fr;} }
+
+    .kpi{
+      border:1px solid var(--line);
+      border-radius: 16px;
+      padding:12px;
+      background: #fff;
+    }
+    .kpi .label{ color:var(--muted); font-size:12px; }
+    .kpi .value{ font-size:22px; font-weight:900; margin-top:4px; }
+    .kpi .sub{ color:var(--muted); font-size:12px; margin-top:4px; }
+
+    /* Controls */
+    .controls{
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;
+      margin-top:8px;
+    }
+    .controls-left{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .pill{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:999px;
+      padding:8px 10px;
+      font-size:13px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .pill input{
+      border:none; outline:none; background:transparent; min-width:240px;
+      font-size:13px;
+    }
+    .select{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:999px;
+      padding:8px 10px;
+      font-weight:700;
+      font-size:13px;
+      outline:none;
+    }
+
+    /* Table */
+    .tablewrap{ overflow:auto; border:1px solid var(--line); border-radius: 16px; }
+    table{ width:100%; border-collapse: collapse; min-width: 760px; background:#fff; }
+    th,td{ padding:12px; border-bottom:1px solid var(--line); text-align:left; }
+    th{ font-size:12px; color:var(--muted); letter-spacing:.02em; text-transform:uppercase; }
+    tr:hover td{ background:#fafafa; }
+
+    .badge{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:6px 10px; border-radius:999px;
+      font-weight:900; font-size:12px;
+      border:1px solid var(--line);
+      background:#fff;
+    }
+    .badge.admin{ border-color: rgba(22,129,54,.35); }
+    .badge.user{ border-color: rgba(107,114,128,.25); }
+    .badge .dot{ width:8px; height:8px; border-radius:999px; background: var(--muted); }
+    .badge.admin .dot{ background: var(--done-green); }
+
+    .btnx{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius: 12px;
+      padding:9px 12px;
+      cursor:pointer;
+      font-weight:900;
+      font-size:13px;
+    }
+    .btnx.primary{
+      background: var(--done-green);
+      border-color: rgba(22,129,54,.35);
+      color:#fff;
+    }
+    .btnx.danger{
+      background: #fff;
+      border-color: rgba(185,28,28,.25);
+      color: var(--danger);
+    }
+    .btnx:disabled{ opacity:.55; cursor:not-allowed; }
+
+    .muted{ color:var(--muted); font-size:13px; }
+    .right{ margin-left:auto; }
+    .rowx{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .hr{ height:1px; background:var(--line); margin:14px 0; }
+
+    /* Toast */
+    .toast{
+      position: fixed; right: 18px; bottom: 18px;
+      background:#0f172a; color:#fff;
+      padding:12px 14px; border-radius:14px;
+      box-shadow: 0 12px 40px rgba(2,6,23,.25);
+      max-width: 420px;
+      display:none;
+      z-index: 99999;
+      font-size:13px;
+    }
+    .toast.show{ display:block; }
+
+    /* Modal */
+    .modal-backdrop{
+      display:none;
+      position:fixed; inset:0;
+      background: rgba(15,23,42,.55);
+      z-index: 9999;
+      align-items:center; justify-content:center;
+      padding: 16px;
+    }
+    .modal{
+      width: min(740px, 100%);
+      max-height: 88vh;
+      overflow:auto;
+      background:#fff;
+      border-radius: 18px;
+      box-shadow: 0 20px 80px rgba(2,6,23,.35);
+      border: 1px solid rgba(255,255,255,.25);
+    }
+    .modal header{
+      padding:14px 16px;
+      display:flex; align-items:center; justify-content:space-between;
+      border-bottom:1px solid var(--line);
+    }
+    .modal header b{ font-size:14px; }
+    .modal .body{ padding:16px; }
+    .modal .close{
+      border:1px solid var(--line);
+      background:#fff;
+      border-radius:12px;
+      padding:8px 10px;
+      cursor:pointer;
+      font-weight:900;
+    }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .pre{
+      background:#f7f7f7;
+      border:1px solid var(--line);
+      padding:12px;
+      border-radius: 14px;
+      overflow:auto;
+      font-size:12px;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <img src="/assets/img/logo.png" alt="DONE" />
+        <div class="title">
+          <b>DONE · Admin</b>
+          <span id="who" class="muted">Cargando sesión…</span>
+        </div>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="Admin tabs">
+        <button class="tabbtn active" data-tab="overview"><span class="dot"></span>📊 Overview</button>
+        <button class="tabbtn" data-tab="users"><span class="dot"></span>👥 Usuarios</button>
+        <button class="tabbtn" data-tab="billing"><span class="dot"></span>💳 Pagos</button>
+        <button class="tabbtn" data-tab="invoices"><span class="dot"></span>📄 Facturas</button>
+        <button class="tabbtn" data-tab="logs"><span class="dot"></span>🧾 Logs</button>
+      </div>
+
+      <div class="rowx">
+        <button class="btnx" id="refreshAll">⟳ Refrescar</button>
+        <button class="btnx danger" id="logout">Salir</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="admin-wrap">
+
+    <!-- OVERVIEW -->
+    <section class="tabpage" id="tab-overview">
+      <div class="grid">
+        <div class="cardx col-12">
+          <div class="rowx" style="justify-content:space-between;">
+            <div>
+              <h2 style="margin:0;">📊 Overview</h2>
+              <div class="muted">Estado general del sistema (stats + salud básica).</div>
+            </div>
+            <div class="rowx">
+              <span class="badge" id="envBadge"><span class="dot"></span><span>ENV</span></span>
+              <span class="badge" id="apiBadge"><span class="dot"></span><span>API</span></span>
+            </div>
+          </div>
+
+          <div class="hr"></div>
+
+          <div class="kpis">
+            <div class="kpi">
+              <div class="label">Total usuarios</div>
+              <div class="value" id="kpiUsers">—</div>
+              <div class="sub" id="kpiUsersSub">—</div>
+            </div>
+            <div class="kpi">
+              <div class="label">Admins</div>
+              <div class="value" id="kpiAdmins">—</div>
+              <div class="sub">Usuarios con role=admin</div>
+            </div>
+            <div class="kpi">
+              <div class="label">Pagos</div>
+              <div class="value" id="kpiPayments">—</div>
+              <div class="sub">Coming soon</div>
+            </div>
+            <div class="kpi">
+              <div class="label">Facturas</div>
+              <div class="value" id="kpiInvoices">—</div>
+              <div class="sub">Coming soon</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cardx col-8">
+  <div class="rowx" style="justify-content:space-between;">
+    <div>
+      <h3 style="margin:0;">📈 Actividad</h3>
+      <div class="muted">Resumen de uso (desde <span class="mono">/admin/stats</span>).</div>
+    </div>
+
+    <button class="btnx" id="toggleRaw">Ver detalle (debug)</button>
+  </div>
+
+  <div class="hr"></div>
+
+  <div class="kpis" style="grid-template-columns:repeat(4,1fr);">
+    <div class="kpi">
+      <div class="label">Usuarios</div>
+      <div class="value" id="statUsers">—</div>
+      <div class="sub" id="statUsersSub">Total</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Chats</div>
+      <div class="value" id="statChats">—</div>
+      <div class="sub">Total</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Mensajes</div>
+      <div class="value" id="statMessages">—</div>
+      <div class="sub">Total</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Tareas</div>
+      <div class="value" id="statTasks">—</div>
+      <div class="sub">Total</div>
+    </div>
+  </div>
+
+  <div class="hr"></div>
+
+  <div id="rawBox" style="display:none;">
+    <div class="muted" style="margin-bottom:6px;">JSON (solo para debug)</div>
+    <pre id="stats" class="pre">Cargando…</pre>
+  </div>
+</div>
+
+        <div class="cardx col-4">
+          <h3 style="margin:0;">⚡ Acciones rápidas</h3>
+          <div class="muted">Cosas típicas de admin.</div>
+          <div class="hr"></div>
+
+          <div class="rowx">
+            <button class="btnx primary" id="goUsers">👥 Ir a Usuarios</button>
+            <button class="btnx" id="copyAdminUrl">🔗 Copiar URL</button>
+          </div>
+
+          <div class="hr"></div>
+
+          <div class="muted">
+            Nota: Pagos/Facturas están preparados para cuando metas Stripe o lo que sea.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- USERS -->
+    <section class="tabpage" id="tab-users" style="display:none;">
+      <div class="grid">
+        <div class="cardx col-12">
+          <div class="rowx" style="justify-content:space-between;">
+            <div>
+              <h2 style="margin:0;">👥 Usuarios</h2>
+              <div class="muted">Busca, filtra y cambia roles (admin/user).</div>
+            </div>
+            <div class="rowx">
+              <span class="badge user" id="countBadge"><span class="dot"></span><span id="countText">—</span></span>
+            </div>
+          </div>
+
+          <div class="controls">
+            <div class="controls-left">
+              <div class="pill">
+                🔎
+                <input id="q" placeholder="Buscar por email o nombre…" autocomplete="off" />
+              </div>
+
+              <select id="roleFilter" class="select">
+                <option value="all">Todos</option>
+                <option value="admin">Admins</option>
+                <option value="user">Users</option>
+              </select>
+
+              <select id="sortBy" class="select">
+                <option value="new">Más nuevos</option>
+                <option value="old">Más antiguos</option>
+                <option value="name">Nombre A→Z</option>
+                <option value="email">Email A→Z</option>
+              </select>
+            </div>
+
+            <div class="rowx">
+              <button class="btnx" id="exportCsv">⬇️ Export CSV</button>
+              <button class="btnx" id="reloadUsers">⟳ Recargar</button>
+            </div>
+          </div>
+
+          <div class="hr"></div>
+
+          <div class="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Usuario</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Estado</th>
+                  <th>Creado</th>
+                  <th style="width:260px;">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+
+          <div class="muted" style="margin-top:10px;">
+            Tip: click en “Ver” para abrir el modal del usuario.
+            <span id="msg" class="right"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BILLING -->
+    <section class="tabpage" id="tab-billing" style="display:none;">
+      <div class="grid">
+        <div class="cardx col-12">
+          <h2 style="margin:0;">💳 Pagos</h2>
+          <div class="muted">Aún no hay pagos. Aquí conectaremos Stripe (o lo que uses) y lo verás todo.</div>
+          <div class="hr"></div>
+          <div class="pre">Coming soon ✅</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- INVOICES -->
+    <section class="tabpage" id="tab-invoices" style="display:none;">
+      <div class="grid">
+        <div class="cardx col-12">
+          <h2 style="margin:0;">📄 Facturas</h2>
+          <div class="muted">Sección lista para cuando generes facturas.</div>
+          <div class="hr"></div>
+          <div class="pre">Coming soon ✅</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LOGS -->
+    <section class="tabpage" id="tab-logs" style="display:none;">
+      <div class="grid">
+        <div class="cardx col-12">
+          <h2 style="margin:0;">🧾 Logs</h2>
+          <div class="muted">Idea: logs de admin actions, errores, auditoría, etc.</div>
+          <div class="hr"></div>
+          <div class="pre">Coming soon ✅</div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- MODAL USER -->
+  <div class="modal-backdrop" id="modalBackdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <header>
+        <b id="modalTitle">Usuario</b>
+        <button class="close" id="modalClose">Cerrar</button>
+      </header>
+      <div class="body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <script src="/api.js" defer></script>
+  <script src="/admin.js" defer></script>
+</body>
+</html>

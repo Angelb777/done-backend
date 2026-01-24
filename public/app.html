@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DONE · App</title>
+
+  <link rel="icon" type="image/png" href="/assets/img/ticklogo.png">
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+
+<body>
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="brand">
+      <img src="/assets/img/logo.png" class="brand-logo" alt="DONE" />
+      <span class="pill" id="rolePill">user</span>
+    </div>
+
+    <div class="topbar-actions">
+      <button class="iconbtn" id="btnNewGroup" title="Nuevo grupo">＋</button>
+      <button class="iconbtn" id="btnSearchDm" title="Nuevo chat">🔍</button>
+      <button class="btn outline" id="logout">Salir</button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="shell">
+    <!-- CHATS -->
+    <section class="view" id="view-chats">
+      <div class="view-header">
+        <h2>Chats</h2>
+        <div class="hint">Pulsa 🔍 para empezar un DM o ＋ para crear un grupo.</div>
+      </div>
+
+      <div id="chatsState" class="state"></div>
+      <div id="chatsList" class="list"></div>
+    </section>
+
+    <!-- DASHBOARD -->
+<section class="view hidden" id="view-dashboard">
+  <div class="view-header">
+    <h2>Dashboard</h2>
+    <div class="dash-kpis" id="dashKpis">
+  <div class="kpi kpi-red">
+    <div class="kpi-num" id="kpiMinePending">0</div>
+    <div class="kpi-label">Pendientes</div>
+  </div>
+
+  <div class="kpi kpi-green">
+    <div class="kpi-num" id="kpiAssignedPending">0</div>
+    <div class="kpi-label">Solicitadas</div>
+  </div>
+</div>
+  </div>
+
+  <!-- Segmented -->
+  <div class="segmented">
+    <button class="seg active" id="dashTabTasks">Tareas</button>
+    <button class="seg" id="dashTabHistory">Historial</button>
+  </div>
+
+  <div id="dashState" class="state"></div>
+
+  <div class="dash-grid">
+    <div class="dash-section" id="secMine"></div>
+    <div class="dash-section" id="secAssigned"></div>
+  </div>
+</section>
+
+    <!-- PROFILE -->
+    <section class="view hidden" id="view-profile">
+      <div class="view-header">
+        <h2>Perfil</h2>
+        <div class="hint">Nombre, estado y foto.</div>
+      </div>
+
+      <div id="meCard" class="card"></div>
+    </section>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <div class="bottomnav">
+    <button class="navitem active" data-view="chats">
+      <div class="navicon">💬</div>
+      <div class="navlabel">Chats</div>
+    </button>
+    <button class="navitem" data-view="dashboard">
+      <div class="navicon">✅</div>
+      <div class="navlabel">Dashboard</div>
+    </button>
+    <button class="navitem" data-view="profile">
+      <div class="navicon">👤</div>
+      <div class="navlabel">Perfil</div>
+    </button>
+  </div>
+
+  <!-- MODAL -->
+  <div class="modal hidden" id="modal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div class="modal-title" id="modalTitle">Modal</div>
+        <button class="iconbtn" id="modalClose" title="Cerrar">✕</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <script src="/api.js" defer></script>
+  <script src="/app.js" defer></script>
+</body>
+</html>
