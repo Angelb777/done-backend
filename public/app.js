@@ -392,11 +392,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       state.textContent = "Creando…";
 
       // ✅ NUEVO: crea grupo + foto (si hay)
-      await API.createGroupWithPhoto({
-       title: title,
-        memberIds: selected.map(u => u.id || u._id),
-       photo: photoFile,
-      });
+      await API.createGroupWithPhoto(
+      title,
+      selected.map(u => u.id || u._id),
+      photoFile
+     );
 
       closeModal();
       await loadChats({showSpinner:false});
