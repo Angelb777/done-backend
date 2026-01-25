@@ -187,6 +187,52 @@ async function getTask(taskId){
   return api(`/tasks/${encodeURIComponent(taskId)}`);
 }
 
+async function deleteChat(chatId){
+  return api(`/chats/${encodeURIComponent(chatId)}`, { method: "DELETE" });
+}
+
+async function createGroupWithPhoto(title, memberIds, photoFile){
+  const token = getToken();
+  const form = new FormData();
+
+  form.append("type", "GROUP");
+  form.append("title", title);
+
+  // ✅ robusto: mandamos JSON + repetido por si el backend lo espera así
+  form.append("memberIds", JSON.stringify(memberIds || []));
+  for (const id of (memberIds || [])) form.append("memberIds[]", id);
+
+  if (photoFile) form.append("photo", photoFile); // field "photo"
+
+  const res = await fetch("/chats", {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+
+  const data = await res.json().catch(()=> ({}));
+  if(!res.ok){
+    const msg = data?.error || data?.message || `Request failed (${res.status})`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
+async function addGroupMembers(chatId, memberIds){
+  return api(`/chats/${encodeURIComponent(chatId)}/members`, {
+    method:"PATCH",
+    body: JSON.stringify({ memberIds }),
+  });
+}
+
+async function leaveGroup(chatId){
+  return api(`/chats/${encodeURIComponent(chatId)}/leave`, {
+    method:"POST",
+    body: JSON.stringify({}),
+  });
+}
+
+
 // =======================
 // EXPORT GLOBAL
 // =======================
@@ -214,4 +260,12 @@ window.DONE_API = {
   postTaskComment,
 
   getTask,
+
+  deleteChat,
+
+  createGroup,
+  createGroupWithPhoto,
+
+  addGroupMembers,
+  leaveGroup,
 };

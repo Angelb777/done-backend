@@ -531,27 +531,38 @@ await renderTopTaskAttachments();
     </div>
 
     <div class="modal-body">
-      ${isGroupChat ? `
-      <div class="group-photo-box" id="gpBox">
-        <div class="gp-left">
-          <div class="gp-title">Foto del grupo</div>
-          <div class="gp-sub">Se verá en la lista de chats</div>
+      ${
+        isGroupChat
+          ? `
+        <div class="group-photo-box" id="gpBox">
+          <div class="gp-left">
+            <div class="gp-title">Grupo</div>
+            <div class="gp-sub">Administra la foto y los miembros</div>
+          </div>
+
+          <div class="gp-right" style="display:flex; gap:10px; align-items:center;">
+            <div class="gp-avatar" id="gpAvatar"></div>
+            <button class="btn outline" id="gpChange" type="button">Cambiar foto</button>
+            <input id="gpInput" type="file" accept="image/*" style="display:none;" />
+          </div>
         </div>
 
-        <div class="gp-right">
-          <div class="gp-avatar" id="gpAvatar"></div>
-          <button class="btn outline" id="gpChange" type="button">Cambiar</button>
-          <input id="gpInput" type="file" accept="image/*" style="display:none;" />
+        <div class="group-actions" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+          <button class="btn outline" id="gmAdd" type="button">➕ Añadir participantes</button>
+          <button class="btn danger" id="gmLeave" type="button">🚪 Salir del grupo</button>
         </div>
-      </div>
-      <div style="height:12px;"></div>
-      ` : ""}
+
+        <div style="height:12px;"></div>
+      `
+          : ""
+      }
 
       <div id="fState" class="state" style="margin:6px 0;">Cargando…</div>
       <div id="fList"></div>
     </div>
   </div>
 `;
+       
   document.body.appendChild(modal);
     __chatFilesModal = modal;
 

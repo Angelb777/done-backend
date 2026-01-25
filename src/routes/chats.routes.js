@@ -154,12 +154,42 @@ router.get("/", auth, async (req, res, next) => {
 
 
 // Create chat (DM or GROUP)
-router.post("/", auth, async (req, res, next) => {
+// Create chat (DM or GROUP)  ✅ JSON o multipart con foto
+router.post("/", auth, uploadChatPhoto.single("photo"), async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const data = createChatSchema.parse(req.body);
 
-    const uniqueMembers = Array.from(new Set([userId, ...data.memberIds]));
+    const isMultipart = String(req.headers["content-type"] || "").includes("multipart/form-data");
+
+    let data;
+
+    if (isMultipart) {
+      // multipart: fields vienen como strings
+      const type = String(req.body.type || "").toUpperCase();
+
+      // memberIds viene como JSON string: '["id1","id2"]'
+      let memberIds = [];
+      try {
+        memberIds = JSON.parse(req.body.memberIds || "[]");
+      } catch (_) {
+        memberIds = [];
+      }
+      if (!Array.isArray(memberIds)) memberIds = [];
+
+      const title = String(req.body.title || "").trim();
+
+      data = {
+        type,
+        title,
+        memberIds: memberIds.map(String).filter(Boolean),
+      };
+    } else {
+      // json: como lo tenías
+      data = createChatSchema.parse(req.body);
+    }
+
+    // ✅ members únicos (incluye al creador siempre)
+    const uniqueMembers = Array.from(new Set([String(userId), ...(data.memberIds || []).map(String)]));
 
     // For DM, avoid duplicates
     if (data.type === "DM" && uniqueMembers.length === 2) {
@@ -193,10 +223,7 @@ router.post("/", auth, async (req, res, next) => {
             title: existing.title || null,
             displayTitle,
             peer: peerObj,
-
-            // ✅ DM -> foto del peer
             photoUrl: peerObj?.photoUrl || null,
-
             members: (existing.members || []).map((m) => ({
               id: String(m._id),
               name: m.name,
@@ -209,10 +236,16 @@ router.post("/", auth, async (req, res, next) => {
       }
     }
 
+    // ✅ si es grupo y viene foto en multipart, la guardamos
+    let groupPhotoUrl = data.photoUrl || null;
+    if (data.type === "GROUP" && req.file?.filename) {
+      groupPhotoUrl = `/uploads/chat-photos/${req.file.filename}`;
+    }
+
     const chat = await Chat.create({
       type: data.type,
       title: data.type === "GROUP" ? (data.title || "Grupo") : undefined,
-      photoUrl: data.photoUrl,
+      photoUrl: data.type === "GROUP" ? (groupPhotoUrl || null) : undefined,
       members: uniqueMembers,
     });
 
@@ -242,10 +275,7 @@ router.post("/", auth, async (req, res, next) => {
         title: full.title || null,
         displayTitle,
         peer: peerObj,
-
-        // ✅ DM -> foto peer, GROUP -> foto chat
         photoUrl: full.type === "DM" ? (peerObj?.photoUrl || null) : (full.photoUrl || null),
-
         members: (full.members || []).map((m) => ({
           id: String(m._id),
           name: m.name,
@@ -267,16 +297,18 @@ router.delete("/:chatId", auth, async (req, res, next) => {
     const userId = String(req.user.id);
     const { chatId } = req.params;
 
-    const chat = await Chat.findById(chatId).select("_id members photoUrl");
-    if (chat.photoUrl) filesToDelete.push(chat.photoUrl);
-    if (!chat) return res.status(404).json({ error: "Chat not found" });
-
-    const members = (chat.members || []).map(String);
-    if (!members.includes(userId)) return res.status(403).json({ error: "Forbidden" });
-
-    // 1) Collect attachment URLs to delete from disk (messages + taskComments + tasks)
-    // (tasks are not deleted, but we can delete their uploaded files if you want; default: NO)
     const filesToDelete = [];
+
+const chat = await Chat.findById(chatId).select("_id members photoUrl");
+if (!chat) return res.status(404).json({ error: "Chat not found" });
+
+if (chat.photoUrl) filesToDelete.push(chat.photoUrl);
+
+const members = (chat.members || []).map(String);
+if (!members.includes(userId)) return res.status(403).json({ error: "Forbidden" });
+
+// 1) Collect attachment URLs to delete from disk ...
+
 
     // Messages attachments
     const msgs = await Message.find({ chat: chatId }).select("attachment attachments imageUrl");
@@ -896,6 +928,99 @@ router.post("/:chatId/photo", auth, uploadChatPhoto.single("photo"), async (req,
     await chat.save();
 
     return res.json({ ok: true, photoUrl: newUrl });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ===============================
+// GROUP: Add members
+// PATCH /chats/:chatId/members  { memberIds: ["id1","id2"] }
+// ===============================
+router.patch("/:chatId/members", auth, async (req, res, next) => {
+  try {
+    const userId = String(req.user.id);
+    const { chatId } = req.params;
+
+    const chat = await Chat.findById(chatId).select("_id type members title photoUrl");
+    if (!chat) return res.status(404).json({ error: "Chat not found" });
+
+    if (String(chat.type).toUpperCase() !== "GROUP") {
+      return res.status(400).json({ error: "Only GROUP chats can add members" });
+    }
+
+    const members = (chat.members || []).map(String);
+    if (!members.includes(userId)) return res.status(403).json({ error: "Forbidden" });
+
+    const memberIds = Array.isArray(req.body.memberIds) ? req.body.memberIds : [];
+    const clean = memberIds.map(String).filter(Boolean);
+
+    if (clean.length === 0) return res.status(400).json({ error: "memberIds is required" });
+
+    // valida que existan usuarios
+    const usersCount = await User.countDocuments({ _id: { $in: clean } });
+    if (usersCount !== clean.length) {
+      return res.status(400).json({ error: "Some users do not exist" });
+    }
+
+    await Chat.findByIdAndUpdate(chatId, {
+      $addToSet: { members: { $each: clean } },
+    });
+
+    const full = await Chat.findById(chatId)
+      .select("_id type title photoUrl members")
+      .populate("members", "name email photoUrl status");
+
+    return res.json({
+      chat: {
+        id: String(full._id),
+        type: full.type,
+        title: full.title || null,
+        photoUrl: full.photoUrl || null,
+        members: (full.members || []).map((m) => ({
+          _id: String(m._id),
+          name: m.name,
+          email: m.email,
+          photoUrl: m.photoUrl || null,
+          status: m.status || "",
+        })),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ===============================
+// GROUP: Leave group
+// POST /chats/:chatId/leave
+// ===============================
+router.post("/:chatId/leave", auth, async (req, res, next) => {
+  try {
+    const userId = String(req.user.id);
+    const { chatId } = req.params;
+
+    const chat = await Chat.findById(chatId).select("_id type members");
+    if (!chat) return res.status(404).json({ error: "Chat not found" });
+
+    if (String(chat.type).toUpperCase() !== "GROUP") {
+      return res.status(400).json({ error: "Only GROUP chats can be left" });
+    }
+
+    const members = (chat.members || []).map(String);
+    if (!members.includes(userId)) return res.status(403).json({ error: "Forbidden" });
+
+    // quitarte del array
+    await Chat.findByIdAndUpdate(chatId, { $pull: { members: userId } });
+
+    // opcional: si se queda vacío, borrar chat
+    const after = await Chat.findById(chatId).select("_id members");
+    if (after && (after.members || []).length === 0) {
+      await Chat.findByIdAndDelete(chatId);
+      return res.json({ ok: true, deleted: true });
+    }
+
+    return res.json({ ok: true });
   } catch (err) {
     next(err);
   }

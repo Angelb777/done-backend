@@ -298,115 +298,169 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function openNewGroupModal(){
-    openModal("Nuevo grupo", `
-      <div class="field">
-        <label>Nombre del grupo</label>
-        <input class="input" id="groupTitle" placeholder="Ej: Equipo Obra" />
+  openModal("Nuevo grupo", `
+    <div class="field">
+      <label>Nombre del grupo</label>
+      <input class="input" id="groupTitle" placeholder="Ej: Equipo Obra" />
+    </div>
+
+    <div class="field">
+      <label>Foto del grupo (opcional)</label>
+      <div style="display:flex; gap:12px; align-items:center;">
+        <div class="avatar" id="groupPhotoPreview" style="width:52px;height:52px;overflow:hidden;"></div>
+        <div style="flex:1;">
+          <input id="groupPhoto" type="file" accept="image/*" />
+          <div class="state" style="margin-top:6px;">Puedes dejarlo vacío.</div>
+        </div>
       </div>
+    </div>
 
-      <div class="field">
-        <label>Añadir participantes (busca)</label>
-        <input class="input" id="groupQuery" placeholder="mínimo 2 letras" />
-      </div>
+    <div class="field">
+      <label>Añadir participantes (busca)</label>
+      <input class="input" id="groupQuery" placeholder="mínimo 2 letras" />
+    </div>
 
-      <div class="state" id="groupState"></div>
+    <div class="state" id="groupState"></div>
 
-      <div class="card" style="margin-bottom:10px;">
-        <div style="font-weight:1000;margin-bottom:8px;">Seleccionados</div>
-        <div id="groupSelected" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
-      </div>
+    <div class="card" style="margin-bottom:10px;">
+      <div style="font-weight:1000;margin-bottom:8px;">Seleccionados</div>
+      <div id="groupSelected" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+    </div>
 
-      <div id="groupResults" class="list"></div>
+    <div id="groupResults" class="list"></div>
 
-      <div class="row right" style="margin-top:12px;">
-        <button class="btn primary" id="btnCreateGroup">Crear grupo</button>
-      </div>
-    `);
+    <div class="row right" style="margin-top:12px;">
+      <button class="btn primary" id="btnCreateGroup">Crear grupo</button>
+    </div>
+  `);
 
-    const titleEl = document.getElementById("groupTitle");
-    const qEl = document.getElementById("groupQuery");
-    const state = document.getElementById("groupState");
-    const resultsEl = document.getElementById("groupResults");
-    const selectedEl = document.getElementById("groupSelected");
-    const createBtn = document.getElementById("btnCreateGroup");
+  const titleEl = document.getElementById("groupTitle");
+  const qEl = document.getElementById("groupQuery");
+  const state = document.getElementById("groupState");
+  const resultsEl = document.getElementById("groupResults");
+  const selectedEl = document.getElementById("groupSelected");
+  const createBtn = document.getElementById("btnCreateGroup");
 
-    const selected = []; // users
-    let debounce = null;
+  const photoInput = document.getElementById("groupPhoto");
+  const photoPreview = document.getElementById("groupPhotoPreview");
 
-    qEl.addEventListener("input", () => {
-      clearTimeout(debounce);
-      debounce = setTimeout(doSearch, 250);
-    });
+  const selected = [];
+  let debounce = null;
 
-    createBtn.addEventListener("click", async () => {
-      const title = titleEl.value.trim();
-      if(!title) { state.textContent = "Pon un nombre al grupo."; return; }
-      if(!selected.length) { state.textContent = "Añade al menos 1 participante."; return; }
-
-      try{
-        createBtn.disabled = true;
-        state.textContent = "Creando…";
-        await API.createGroup(title, selected.map(u => u.id || u._id));
-        closeModal();
-        await loadChats({showSpinner:false});
-      }catch(e){
-        state.textContent = e.message || String(e);
-      }finally{
-        createBtn.disabled = false;
-      }
-    });
-
-    function renderSelected(){
-      selectedEl.innerHTML = "";
-      for(const u of selected){
-        const chip = document.createElement("button");
-        chip.className = "btn outline";
-        chip.style.padding = "8px 10px";
-        chip.textContent = `✕ ${u.displayName || u.name || u.email}`;
-        chip.addEventListener("click", () => {
-          const id = (u.id || u._id);
-          const idx = selected.findIndex(x => (x.id||x._id) === id);
-          if(idx >= 0) selected.splice(idx,1);
-          renderSelected();
-        });
-        selectedEl.appendChild(chip);
-      }
-      if(!selected.length){
-        selectedEl.innerHTML = `<span class="state">Nadie aún.</span>`;
-      }
+  // preview foto
+  function paintPreview(file){
+    if(!photoPreview) return;
+    if(!file){
+      const initial = (titleEl.value.trim()?.[0] || "G").toUpperCase();
+      photoPreview.innerHTML = initial;
+      return;
     }
-    renderSelected();
+    const url = URL.createObjectURL(file);
+    photoPreview.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover;" />`;
+    // limpiamos objectURL al cerrar modal (cuando se cierre, modalBody se borra)
+    photoPreview.dataset.url = url;
+  }
 
-    async function doSearch(){
-      const q = qEl.value.trim();
-      if(q.length < 2){
-        state.textContent = "Escribe al menos 2 caracteres.";
-        resultsEl.innerHTML = "";
-        return;
-      }
+  // inicial
+  paintPreview(null);
 
-      state.textContent = "Buscando…";
-      resultsEl.innerHTML = "";
+  titleEl.addEventListener("input", ()=>{
+    if(!photoInput.files?.[0]) paintPreview(null);
+  });
 
-      try{
-        const raw = await API.searchUsers(q);
-        let users = Array.isArray(raw) ? raw : (raw.users || []);
+  photoInput.addEventListener("change", ()=>{
+    // revoca anterior
+    const old = photoPreview?.dataset?.url;
+    if(old) { try{ URL.revokeObjectURL(old); }catch(_){} }
+    paintPreview(photoInput.files?.[0] || null);
+  });
 
-        const selectedIds = new Set(selected.map(u => (u.id||u._id)));
-        users = users.filter(u => !selectedIds.has(u.id||u._id));
+  qEl.addEventListener("input", () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(doSearch, 250);
+  });
 
-        state.textContent = users.length ? "" : "Sin resultados.";
-        for(const u of users){
-          resultsEl.appendChild(renderUserRow(u, () => {
-            selected.push(u);
-            renderSelected();
-          }, "Añadir"));
-        }
-      }catch(e){
-        state.textContent = e.message || String(e);
-      }
+  createBtn.addEventListener("click", async () => {
+    const title = titleEl.value.trim();
+    if(!title) { state.textContent = "Pon un nombre al grupo."; return; }
+    if(!selected.length) { state.textContent = "Añade al menos 1 participante."; return; }
+
+    const photoFile = photoInput.files?.[0] || null;
+
+    try{
+      createBtn.disabled = true;
+      state.textContent = "Creando…";
+
+      // ✅ NUEVO: crea grupo + foto (si hay)
+      await API.createGroupWithPhoto({
+        title,
+        memberIds: selected.map(u => u.id || u._id),
+        photo: photoFile, // puede ser null
+      });
+
+      closeModal();
+      await loadChats({showSpinner:false});
+    }catch(e){
+      state.textContent = e.message || String(e);
+    }finally{
+      createBtn.disabled = false;
+      // limpiar objectURL preview si existe
+      const old = photoPreview?.dataset?.url;
+      if(old) { try{ URL.revokeObjectURL(old); }catch(_){} }
+    }
+  });
+
+  function renderSelected(){
+    selectedEl.innerHTML = "";
+    for(const u of selected){
+      const chip = document.createElement("button");
+      chip.className = "btn outline";
+      chip.style.padding = "8px 10px";
+      chip.textContent = `✕ ${u.displayName || u.name || u.email}`;
+      chip.addEventListener("click", () => {
+        const id = (u.id || u._id);
+        const idx = selected.findIndex(x => (x.id||x._id) === id);
+        if(idx >= 0) selected.splice(idx,1);
+        renderSelected();
+      });
+      selectedEl.appendChild(chip);
+    }
+    if(!selected.length){
+      selectedEl.innerHTML = `<span class="state">Nadie aún.</span>`;
     }
   }
+  renderSelected();
+
+  async function doSearch(){
+    const q = qEl.value.trim();
+    if(q.length < 2){
+      state.textContent = "Escribe al menos 2 caracteres.";
+      resultsEl.innerHTML = "";
+      return;
+    }
+
+    state.textContent = "Buscando…";
+    resultsEl.innerHTML = "";
+
+    try{
+      const raw = await API.searchUsers(q);
+      let users = Array.isArray(raw) ? raw : (raw.users || []);
+
+      const selectedIds = new Set(selected.map(u => (u.id||u._id)));
+      users = users.filter(u => !selectedIds.has(u.id||u._id));
+
+      state.textContent = users.length ? "" : "Sin resultados.";
+      for(const u of users){
+        resultsEl.appendChild(renderUserRow(u, () => {
+          selected.push(u);
+          renderSelected();
+        }, "Añadir"));
+      }
+    }catch(e){
+      state.textContent = e.message || String(e);
+    }
+  }
+}
 
   function renderUserRow(u, onTap, ctaText="Abrir DM"){
     const name = u.displayName || u.name || (u.email ? u.email.split("@")[0] : "Usuario");

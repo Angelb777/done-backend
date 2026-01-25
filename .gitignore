@@ -1,0 +1,13 @@
+# env
+.env
+.env.*
+
+# deps
+node_modules/
+
+# uploads locales
+uploads/
+
+# OS / editor
+.DS_Store
+Thumbs.db
