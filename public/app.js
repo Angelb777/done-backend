@@ -123,7 +123,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function openChatContextMenu(c){
-  const title = c.displayTitle || c.title || "Chat";
+  const title = String(c.displayTitle ?? c.title ?? "Chat");
   const id = c.id || c._id;
 
   openModal("Opciones", `
@@ -181,7 +181,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function renderChatRow(c){
-    const title = c.displayTitle || c.title || "Chat";
+    const title = String(c.displayTitle ?? c.title ?? "Chat");
     const subtitle = chatSubtitle(c);
     const photo = fullUrl(c.photoUrl);
     const pending = Number(c.pendingTasksCount || 0);
@@ -393,9 +393,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       // ✅ NUEVO: crea grupo + foto (si hay)
       await API.createGroupWithPhoto({
-        title,
+       title: title,
         memberIds: selected.map(u => u.id || u._id),
-        photo: photoFile, // puede ser null
+       photo: photoFile,
       });
 
       closeModal();
