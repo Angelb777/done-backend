@@ -15,6 +15,7 @@ const devRoutes = require("./routes/dev.routes");
 const tasksRoutes = require("./routes/tasks.routes");
 const meRoutes = require("./routes/me.routes");
 const adminRoutes = require("./routes/admin.routes");
+const taskOrderRoutes = require("./routes/taskOrder.routes");
 
 const app = express();
 
@@ -73,6 +74,7 @@ app.use("/dev", devRoutes);
 app.use("/tasks", tasksRoutes);
 app.use("/me", meRoutes);
 app.use("/admin", adminRoutes);
+app.use("/", taskOrderRoutes);
 
 // ---------------------------
 // WEB ROUTES (bonitas)

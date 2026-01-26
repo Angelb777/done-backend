@@ -42,6 +42,10 @@ const userSchema = new mongoose.Schema(
       trim: true,
       maxlength: 80,
     },
+    taskOrder: {
+      pending: [{ type: String, default: [] }],
+      requested: [{ type: String, default: [] }],
+    },
 
     // =========================
     // ROLES / PERMISOS (NUEVO)

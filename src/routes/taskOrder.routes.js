@@ -7,7 +7,7 @@ const router = express.Router();
 /**
  * GET /me/task-order
  */
-router.get("/me/task-order", auth, async (req, res, next) => {
+router.get("/task-order", auth, async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id).select("taskOrder");
     return res.json({ taskOrder: user?.taskOrder || { pending: [], requested: [] } });
@@ -20,7 +20,7 @@ router.get("/me/task-order", auth, async (req, res, next) => {
  * PATCH /me/task-order
  * body: { section: "pending"|"requested", ids: string[] }
  */
-router.patch("/me/task-order", auth, async (req, res, next) => {
+router.patch("/task-order", auth, async (req, res, next) => {
   try {
     const section = String(req.body.section || "");
     const ids = Array.isArray(req.body.ids) ? req.body.ids.map(String) : [];
