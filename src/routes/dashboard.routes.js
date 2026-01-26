@@ -24,35 +24,14 @@ const router = express.Router();
 router.get("/", auth, async (req, res, next) => {
   try {
     const userId = String(req.user.id);
-    const tab = String(req.query.tab || "TAREAS").toUpperCase(); // TAREAS | HISTORIAL
+    const tab = String(req.query.tab || "TAREAS").toUpperCase();
 
     const now = new Date();
     const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    const me = await User.findById(userId).select("taskOrder");
-const pendingOrder = (me?.taskOrder?.pending || []).map(String);
-const requestedOrder = (me?.taskOrder?.requested || []).map(String);
-
-function applyOrder(tasks, orderIds) {
-  const idx = new Map(orderIds.map((id, i) => [String(id), i]));
-
-  // ordena por:
-  // 1) índice si existe en orderIds
-  // 2) fallback estable (dueDate si existe, si no createdAt)
-  return tasks.sort((a, b) => {
-    const ai = idx.has(String(a._id)) ? idx.get(String(a._id)) : 1e9;
-    const bi = idx.has(String(b._id)) ? idx.get(String(b._id)) : 1e9;
-    if (ai !== bi) return ai - bi;
-
-    const ad = a.dueDate ? new Date(a.dueDate).getTime() : null;
-    const bd = b.dueDate ? new Date(b.dueDate).getTime() : null;
-    if (ad == null && bd == null) return new Date(a.createdAt) - new Date(b.createdAt);
-    if (ad == null) return 1;
-    if (bd == null) return -1;
-    return ad - bd;
-  });
-}
-
+    const me = await User.findById(userId).select("taskOrder").lean();
+    const pendingOrder = (me?.taskOrder?.pending || []).map(String);
+    const requestedOrder = (me?.taskOrder?.requested || []).map(String);
 
     function buildFilter(base) {
       if (tab === "HISTORIAL") {
@@ -62,8 +41,6 @@ function applyOrder(tasks, orderIds) {
           $or: [{ archivedAt: { $ne: null } }, { completedAt: { $lt: since } }],
         };
       }
-
-      // TAREAS (activo)
       return {
         ...base,
         archivedAt: null,
@@ -74,37 +51,101 @@ function applyOrder(tasks, orderIds) {
       };
     }
 
-    // ✅ ahora también seleccionamos "attachments"
+    function applyOrderStable(tasks, orderIds) {
+      const idx = new Map((orderIds || []).map((id, i) => [String(id), i]));
+      return [...tasks].sort((a, b) => {
+        const aId = String(a._id);
+        const bId = String(b._id);
+
+        const ai = idx.has(aId) ? idx.get(aId) : 1e9;
+        const bi = idx.has(bId) ? idx.get(bId) : 1e9;
+        if (ai !== bi) return ai - bi;
+
+        const ac = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bc = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        if (ac !== bc) return ac - bc;
+
+        // tie-breaker definitivo: evita “se mueve solo”
+        return aId.localeCompare(bId);
+      });
+    }
+
+    function mapTask(t) {
+      const atts = Array.isArray(t.attachments) ? t.attachments : [];
+
+      return {
+        id: String(t._id),
+        title: t.title,
+        color: t.color,
+        status: t.status,
+        dueDate: t.dueDate || null,
+        createdAt: t.createdAt || null,
+        completedAt: t.completedAt || null,
+        archivedAt: t.archivedAt || null,
+        attachments: atts
+          .map((a) => ({
+            url: a?.url || a?.path || "",
+            name: a?.name || a?.filename || "",
+            mime: a?.mime || a?.mimetype || a?.mimeType || a?.contentType || "",
+            size: Number(a?.size || 0),
+          }))
+          .filter((a) => String(a.url).trim().length > 0),
+        chat: t.chat
+          ? {
+              id: String(t.chat._id),
+              title: t.chat.type === "GROUP" ? t.chat.title || "Grupo" : null,
+              type: t.chat.type,
+            }
+          : null,
+        creator: t.creator
+          ? {
+              id: String(t.creator._id),
+              name: t.creator.name,
+              email: t.creator.email,
+              photoUrl: t.creator.photoUrl || null,
+            }
+          : null,
+        assignee: t.assignee
+          ? {
+              id: String(t.assignee._id),
+              name: t.assignee.name,
+              email: t.assignee.email,
+              photoUrl: t.assignee.photoUrl || null,
+            }
+          : null,
+        messageId: t.message,
+      };
+    }
+
     const selectFields =
       "_id title color status dueDate chat creator assignee message createdAt completedAt archivedAt attachments";
 
-    const mine = await Task.find(buildFilter({ assignee: userId }))
+    const mineRaw = await Task.find(buildFilter({ assignee: userId }))
       .populate("creator", "name email photoUrl")
       .populate("assignee", "name email photoUrl")
       .populate("chat", "type title")
-      .select(selectFields);
+      .select(selectFields)
+      .lean();
 
-    const assignedByMe = await Task.find(
-      buildFilter({
-        creator: userId,
-        assignee: { $ne: userId },
-      })
+    const assignedRaw = await Task.find(
+      buildFilter({ creator: userId, assignee: { $ne: userId } })
     )
       .populate("creator", "name email photoUrl")
       .populate("assignee", "name email photoUrl")
       .populate("chat", "type title")
-      .select(selectFields);
+      .select(selectFields)
+      .lean();
 
     return res.json({
-  tab,
-  mine: mine.map(mapTask),
-  assignedByMe: assignedByMe.map(mapTask),
-});
-
+      tab,
+      mine: applyOrderStable(mineRaw, pendingOrder).map(mapTask),
+      assignedByMe: applyOrderStable(assignedRaw, requestedOrder).map(mapTask),
+    });
   } catch (err) {
     next(err);
   }
 });
+
 
 function mapTask(t) {
   const atts = Array.isArray(t.attachments) ? t.attachments : [];
