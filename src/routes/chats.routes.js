@@ -299,6 +299,30 @@ router.post("/", auth, uploadChatPhoto.single("photo"), async (req, res, next) =
   }
 });
 
+// ✅ GET /chats/personal  -> crea (si no existe) tu chat PERSONAL
+router.get("/personal", auth, async (req, res, next) => {
+  try {
+    const userId = String(req.user.id);
+
+    let chat = await Chat.findOne({
+      type: "PERSONAL",
+      members: userId,
+    });
+
+    if (!chat) {
+      chat = await Chat.create({
+        type: "PERSONAL",
+        title: "Mis tareas",
+        members: [userId],
+      });
+    }
+
+    return res.json({ chatId: String(chat._id), title: chat.title || "Mis tareas" });
+  } catch (e) {
+    next(e);
+  }
+});
+
 // Delete chat (and its conversation + files/messages/comments)
 // NOTE: Tasks are NOT deleted (they may still appear in dashboard)
 router.delete("/:chatId", auth, async (req, res, next) => {
@@ -1031,27 +1055,6 @@ router.post("/:chatId/leave", auth, async (req, res, next) => {
     return res.json({ ok: true });
   } catch (err) {
     next(err);
-  }
-});
-
-// GET /chats/personal -> { chatId }
-router.get("/personal", auth, async (req, res, next) => {
-  try {
-    const userId = String(req.user.id);
-
-    let chat = await Chat.findOne({ type: "PERSONAL", members: userId }).select("_id");
-    if (!chat) {
-      chat = await Chat.create({
-        type: "PERSONAL",
-        title: "Mis tareas",
-        members: [userId],
-        createdBy: userId,
-      });
-    }
-
-    return res.json({ chatId: String(chat._id) });
-  } catch (e) {
-    next(e);
   }
 });
 
