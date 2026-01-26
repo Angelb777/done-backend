@@ -7,6 +7,8 @@ const { auth } = require("../middleware/auth"); // 👈 CLAVE
 
 const router = express.Router();
 
+console.log("✅ me.routes loaded");
+
 // ---------- Multer setup ----------
 const uploadDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadDir)) {
@@ -101,5 +103,37 @@ router.post("/photo", auth, upload.single("photo"), async (req, res, next) => {
     next(err);
   }
 });
+
+router.get("/task-order", auth, async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id).select("taskOrder");
+    return res.json({ taskOrder: user?.taskOrder || { pending: [], requested: [] } });
+  } catch (e) {
+    next(e);
+  }
+});
+
+
+router.patch("/task-order", auth, async (req, res, next) => {
+  try {
+    const section = String(req.body.section || "");
+    const ids = Array.isArray(req.body.ids) ? req.body.ids.map(String) : [];
+
+    if (!["pending", "requested"].includes(section)) {
+      return res.status(400).json({ error: "Invalid section" });
+    }
+
+    const updated = await User.findByIdAndUpdate(
+      req.user.id,
+      { $set: { [`taskOrder.${section}`]: ids } },
+      { new: true, select: "taskOrder" }
+    );
+
+    return res.json({ ok: true, taskOrder: updated.taskOrder });
+  } catch (e) {
+    next(e);
+  }
+});
+
 
 module.exports = router;
