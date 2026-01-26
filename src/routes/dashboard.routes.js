@@ -97,9 +97,10 @@ function applyOrder(tasks, orderIds) {
 
     return res.json({
   tab,
-  mine: applyOrder(mine, pendingOrder).map(mapTask),
-  assignedByMe: applyOrder(assignedByMe, requestedOrder).map(mapTask),
+  mine: mine.map(mapTask),
+  assignedByMe: assignedByMe.map(mapTask),
 });
+
   } catch (err) {
     next(err);
   }
