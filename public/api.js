@@ -191,26 +191,22 @@ async function deleteChat(chatId){
   return api(`/chats/${encodeURIComponent(chatId)}`, { method: "DELETE" });
 }
 
-async function createGroupWithPhoto({ title, memberIds, photo }) {
+async function createGroupWithPhoto(title, memberIds, photo){
   const token = getToken();
   const form = new FormData();
-
-  form.append("type", "GROUP");
-  form.append("title", String(title || "")); // ✅ fuerza string
+  form.append("type","GROUP");
+  form.append("title", String(title || ""));
   form.append("memberIds", JSON.stringify(memberIds || []));
-
-  if (photo) form.append("photo", photo);
+  if(photo) form.append("photo", photo);
 
   const res = await fetch("/chats", {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: form,
+    method:"POST",
+    headers: token ? { Authorization:`Bearer ${token}` } : {},
+    body: form
   });
 
   const data = await res.json().catch(()=> ({}));
-  if(!res.ok){
-    throw new Error(data?.error || data?.message || `Request failed (${res.status})`);
-  }
+  if(!res.ok) throw new Error(data?.error || data?.message || `Request failed (${res.status})`);
   return data;
 }
 
