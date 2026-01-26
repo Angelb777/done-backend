@@ -3,7 +3,7 @@ const { auth } = require("../middleware/auth");
 const Task = require("../models/Task");
 const Chat = require("../models/Chat");
 const TaskComment = require("../models/TaskComment");
-const { TASK_STATUS } = require("../utils/constants");
+const { TASK_STATUS, TASK_COLORS } = require("../utils/constants");
 const { upload, toPublicUrl } = require("../utils/upload");
 
 const router = express.Router();
@@ -233,20 +233,24 @@ router.post("/:taskId/comments", auth, upload.array("files", 10), async (req, re
   }
 });
 
+const { TASK_STATUS, TASK_COLORS } = require("../utils/constants"); // 👈 arriba del archivo (mejor aquí)
+
 // ✅ PATCH /tasks/:taskId  (editar dueDate / color)
 router.patch("/:taskId", auth, async (req, res, next) => {
   try {
     const userId = String(req.user.id);
     const taskId = String(req.params.taskId);
 
-    const { dueDate, color } = req.body;
+    const task = await Task.findById(taskId)
+      .populate("creator", "name email photoUrl")
+      .populate("assignee", "name email photoUrl")
+      .populate("chat", "type title");
 
-    const task = await Task.findById(taskId);
     if (!task) return res.status(404).json({ error: "Task not found" });
 
-    // Permiso básico: creador o responsable
-    const isCreator = String(task.creator) === userId;
-    const isAssignee = String(task.assignee) === userId;
+    // Permiso: creador o responsable (assignee) o dentro de assignees
+    const isCreator = String(task.creator?._id || task.creator) === userId;
+    const isAssignee = String(task.assignee?._id || task.assignee) === userId;
     const isInAssignees = Array.isArray(task.assignees)
       ? task.assignees.map(String).includes(userId)
       : false;
@@ -257,33 +261,55 @@ router.patch("/:taskId", auth, async (req, res, next) => {
 
     // dueDate: si llega null => borrar
     if ("dueDate" in req.body) {
+      const dueDate = req.body.dueDate;
       task.dueDate = dueDate ? new Date(dueDate) : null;
     }
 
-    // color: validar contra TASK_COLORS
+    // color: validar contra TASK_COLORS (strings)
     if ("color" in req.body) {
-      const c = String(color || "").trim();
-      if (c && !TASK_COLORS.includes(c)) {
+      const c = String(req.body.color || "").trim();
+      if (!TASK_COLORS.includes(c)) {
         return res.status(400).json({ error: "Invalid color" });
       }
-      task.color = c || task.color;
+      task.color = c;
     }
 
     await task.save();
 
-    // devuelve task “bonita” (similar a dashboard)
-    const t = await Task.findById(task._id)
-      .populate("creator", "name email photoUrl")
-      .populate("assignee", "name email photoUrl")
-      .populate("chat", "type title")
-      .select(
-        "_id title color status dueDate chat creator assignee message createdAt completedAt archivedAt attachments"
-      );
-
-    return res.json({ ok: true, task: mapTask(t) });
+    // Respuesta simple, estable, para Flutter
+    return res.json({
+      ok: true,
+      task: {
+        id: String(task._id),
+        _id: String(task._id),
+        title: task.title,
+        status: task.status,
+        color: task.color,
+        dueDate: task.dueDate,
+        createdAt: task.createdAt,
+        completedAt: task.completedAt || null,
+        archivedAt: task.archivedAt || null,
+        attachments: (task.attachments || []).map((a) => ({
+          url: a.url,
+          name: a.name,
+          mime: a.mime,
+          size: a.size,
+        })),
+        chat: task.chat
+          ? { _id: String(task.chat._id), id: String(task.chat._id), type: task.chat.type, title: task.chat.title }
+          : null,
+        creator: task.creator
+          ? { _id: String(task.creator._id), id: String(task.creator._id), name: task.creator.name }
+          : null,
+        assignee: task.assignee
+          ? { _id: String(task.assignee._id), id: String(task.assignee._id), name: task.assignee.name }
+          : null,
+      },
+    });
   } catch (e) {
     next(e);
   }
 });
+
 
 module.exports = router;
