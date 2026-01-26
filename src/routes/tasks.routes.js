@@ -233,8 +233,6 @@ router.post("/:taskId/comments", auth, upload.array("files", 10), async (req, re
   }
 });
 
-const { TASK_STATUS, TASK_COLORS } = require("../utils/constants"); // 👈 arriba del archivo (mejor aquí)
-
 // ✅ PATCH /tasks/:taskId  (editar dueDate / color)
 router.patch("/:taskId", auth, async (req, res, next) => {
   try {
