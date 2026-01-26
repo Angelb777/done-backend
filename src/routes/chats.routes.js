@@ -1034,4 +1034,25 @@ router.post("/:chatId/leave", auth, async (req, res, next) => {
   }
 });
 
+// GET /chats/personal -> { chatId }
+router.get("/personal", auth, async (req, res, next) => {
+  try {
+    const userId = String(req.user.id);
+
+    let chat = await Chat.findOne({ type: "PERSONAL", members: userId }).select("_id");
+    if (!chat) {
+      chat = await Chat.create({
+        type: "PERSONAL",
+        title: "Mis tareas",
+        members: [userId],
+        createdBy: userId,
+      });
+    }
+
+    return res.json({ chatId: String(chat._id) });
+  } catch (e) {
+    next(e);
+  }
+});
+
 module.exports = router;

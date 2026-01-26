@@ -1,6 +1,7 @@
 const express = require("express");
 const { auth } = require("../middleware/auth");
 const Task = require("../models/Task");
+const User = require("../models/User");
 const { TASK_STATUS } = require("../utils/constants");
 
 const router = express.Router();
@@ -27,6 +28,31 @@ router.get("/", auth, async (req, res, next) => {
 
     const now = new Date();
     const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    const me = await User.findById(userId).select("taskOrder");
+const pendingOrder = (me?.taskOrder?.pending || []).map(String);
+const requestedOrder = (me?.taskOrder?.requested || []).map(String);
+
+function applyOrder(tasks, orderIds) {
+  const idx = new Map(orderIds.map((id, i) => [String(id), i]));
+
+  // ordena por:
+  // 1) índice si existe en orderIds
+  // 2) fallback estable (dueDate si existe, si no createdAt)
+  return tasks.sort((a, b) => {
+    const ai = idx.has(String(a._id)) ? idx.get(String(a._id)) : 1e9;
+    const bi = idx.has(String(b._id)) ? idx.get(String(b._id)) : 1e9;
+    if (ai !== bi) return ai - bi;
+
+    const ad = a.dueDate ? new Date(a.dueDate).getTime() : null;
+    const bd = b.dueDate ? new Date(b.dueDate).getTime() : null;
+    if (ad == null && bd == null) return new Date(a.createdAt) - new Date(b.createdAt);
+    if (ad == null) return 1;
+    if (bd == null) return -1;
+    return ad - bd;
+  });
+}
+
 
     function buildFilter(base) {
       if (tab === "HISTORIAL") {
@@ -69,19 +95,11 @@ router.get("/", auth, async (req, res, next) => {
       .populate("chat", "type title")
       .select(selectFields);
 
-    function orderTasks(tasks) {
-      const withDue = tasks.filter((t) => t.dueDate);
-      const withoutDue = tasks.filter((t) => !t.dueDate);
-      withDue.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
-      withoutDue.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-      return [...withDue, ...withoutDue];
-    }
-
     return res.json({
-      tab,
-      mine: orderTasks(mine).map(mapTask),
-      assignedByMe: orderTasks(assignedByMe).map(mapTask),
-    });
+  tab,
+  mine: applyOrder(mine, pendingOrder).map(mapTask),
+  assignedByMe: applyOrder(assignedByMe, requestedOrder).map(mapTask),
+});
   } catch (err) {
     next(err);
   }
@@ -139,5 +157,57 @@ function mapTask(t) {
     messageId: t.message,
   };
 }
+
+/**
+ * PATCH /tasks/:taskId
+ * body: { dueDate?: string|null, color?: number }
+ */
+router.patch("/:taskId", auth, async (req, res, next) => {
+  try {
+    const userId = String(req.user.id);
+    const { taskId } = req.params;
+
+    const task = await Task.findById(taskId).select("_id chat status assignee assignees creator dueDate color");
+    if (!task) return res.status(404).json({ error: "Task not found" });
+
+    if (!canEdit(task, userId)) return res.status(403).json({ error: "Forbidden" });
+
+    const mem = await assertMember(task, userId);
+    if (!mem.ok) return res.status(mem.code).json({ error: mem.error });
+
+    // dueDate
+    if ("dueDate" in req.body) {
+      const v = req.body.dueDate;
+      if (v === null || v === "" || v === "null") {
+        task.dueDate = null;
+      } else {
+        const d = new Date(String(v));
+        if (Number.isNaN(d.getTime())) return res.status(400).json({ error: "Invalid dueDate" });
+        task.dueDate = d;
+      }
+    }
+
+    // color 0..9
+    if ("color" in req.body) {
+      const c = Number(req.body.color);
+      if (!Number.isFinite(c) || c < 0 || c > 9) {
+        return res.status(400).json({ error: "Invalid color (0..9)" });
+      }
+      task.color = c;
+    }
+
+    await task.save();
+
+    return res.json({
+      task: {
+        id: String(task._id),
+        dueDate: task.dueDate || null,
+        color: typeof task.color === "number" ? task.color : 0,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 module.exports = router;
