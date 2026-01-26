@@ -176,7 +176,7 @@ router.post("/", auth, uploadChatPhoto.single("photo"), async (req, res, next) =
       }
       if (!Array.isArray(memberIds)) memberIds = [];
 
-      const title = String(req.body.title || "").trim();
+      const title = String(req.body.title || req.body.name || "").trim();
 
       data = {
         type,
@@ -185,7 +185,9 @@ router.post("/", auth, uploadChatPhoto.single("photo"), async (req, res, next) =
       };
     } else {
       // json: como lo tenías
-      data = createChatSchema.parse(req.body);
+      const parsed = createChatSchema.safeParse(req.body);
+      data = parsed.success ? parsed.data : req.body;
+      data.title = String(data.title || data.name || "").trim();
     }
 
     // ✅ members únicos (incluye al creador siempre)
@@ -241,6 +243,13 @@ router.post("/", auth, uploadChatPhoto.single("photo"), async (req, res, next) =
     if (data.type === "GROUP" && req.file?.filename) {
       groupPhotoUrl = `/uploads/chat-photos/${req.file.filename}`;
     }
+
+    console.log("CREATE CHAT incoming:", {
+    contentType: req.headers["content-type"],
+    body: req.body,
+    file: !!req.file,
+    parsedData: data,
+    });
 
     const chat = await Chat.create({
       type: data.type,
@@ -308,7 +317,6 @@ const members = (chat.members || []).map(String);
 if (!members.includes(userId)) return res.status(403).json({ error: "Forbidden" });
 
 // 1) Collect attachment URLs to delete from disk ...
-
 
     // Messages attachments
     const msgs = await Message.find({ chat: chatId }).select("attachment attachments imageUrl");
