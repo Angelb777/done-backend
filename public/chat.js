@@ -564,19 +564,68 @@ await renderTopTaskAttachments();
 `;
        
   document.body.appendChild(modal);
+  console.log("openChatFilesModal: isGroupChat=", isGroupChat, "chatType=", chatType, "chatId=", chatId);
     __chatFilesModal = modal;
 
-  const fClose = modal.querySelector("#fClose");
-  const fState = modal.querySelector("#fState");
-  const fList  = modal.querySelector("#fList");
+    // ===============================
+// ACCIONES DE GRUPO (AÑADIR / SALIR)
+// ===============================
+if (isGroupChat) {
+  const btnAdd = modal.querySelector("#gmAdd");
+  const btnLeave = modal.querySelector("#gmLeave");
+
+  if (!btnAdd || !btnLeave) {
+    console.warn("Botones de grupo no encontrados");
+  }
+
+  // ➕ AÑADIR PARTICIPANTES
+  btnAdd?.addEventListener("click", async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {
+      await openAddMembersModal(); // 👈 YA LA TIENES DEFINIDA ABAJO
+    } catch (err) {
+      alert(err.message || String(err));
+    }
+  });
+
+  // 🚪 SALIR DEL GRUPO
+  btnLeave?.addEventListener("click", async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const ok = confirm("¿Seguro que quieres salir del grupo?");
+    if (!ok) return;
+
+    try {
+      btnLeave.disabled = true;
+      btnLeave.textContent = "Saliendo…";
+
+      await API.leaveGroup(chatId); // PATCH /chats/:id/leave
+
+      // vuelve al listado de chats
+      location.href = "/app";
+    } catch (err) {
+      alert(err.message || String(err));
+    } finally {
+      btnLeave.disabled = false;
+      btnLeave.textContent = "🚪 Salir del grupo";
+    }
+  });
+   }
+
+   const fClose = modal.querySelector("#fClose");
+   const fState = modal.querySelector("#fState");
+   const fList  = modal.querySelector("#fList");
 
     // --- GROUP PHOTO UI (solo grupos)
-  if (isGroupChat) {
-    const gpAvatar = modal.querySelector("#gpAvatar");
-    const gpChange = modal.querySelector("#gpChange");
-    const gpInput = modal.querySelector("#gpInput");
+     if (isGroupChat) {
+     const gpAvatar = modal.querySelector("#gpAvatar");
+     const gpChange = modal.querySelector("#gpChange");
+     const gpInput = modal.querySelector("#gpInput");
 
-    function paintGroupAvatar(url) {
+     function paintGroupAvatar(url) {
       if (!gpAvatar) return;
 
       const photo = url || CHAT?.photoUrl || null;
@@ -713,6 +762,154 @@ await renderTopTaskAttachments();
   }
   }
 
+  async function openAddMembersModal(){
+  // 1) UI simple
+  const modal = document.createElement("div");
+  modal.className = "imgmodal";
+  modal.innerHTML = `
+    <div class="modal-card">
+      <div class="modal-head">
+        <div class="modal-title">Añadir participantes</div>
+        <button class="iconbtn" id="amClose">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="field">
+          <label>Buscar por nombre o email</label>
+          <input class="input" id="amQuery" placeholder="mínimo 2 letras" />
+        </div>
+
+        <div id="amState" class="state" style="margin-top:8px;"></div>
+        <div id="amResults" class="list" style="margin-top:8px;"></div>
+
+        <div class="row right" style="margin-top:12px;">
+          <button class="btn primary" id="amAddBtn" disabled>Añadir (0)</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const close = () => modal.remove();
+  modal.querySelector("#amClose")?.addEventListener("click", close);
+  modal.addEventListener("click", (e)=>{ if(e.target === modal) close(); });
+
+  const qEl = modal.querySelector("#amQuery");
+  const state = modal.querySelector("#amState");
+  const resultsEl = modal.querySelector("#amResults");
+  const addBtn = modal.querySelector("#amAddBtn");
+
+  // 2) estado
+  const selected = new Map(); // id -> user
+  const currentIds = new Set((CHAT_MEMBERS||[]).map(m => String(m.id)));
+
+  function renderAddBtn(){
+    addBtn.disabled = selected.size === 0;
+    addBtn.textContent = `Añadir (${selected.size})`;
+  }
+  renderAddBtn();
+
+  // 3) búsqueda con debounce
+  let t = null;
+  qEl.focus();
+  qEl.addEventListener("input", ()=>{
+    clearTimeout(t);
+    t = setTimeout(doSearch, 250);
+  });
+
+  async function doSearch(){
+    const q = qEl.value.trim();
+    if(q.length < 2){
+      state.textContent = "Escribe al menos 2 caracteres.";
+      resultsEl.innerHTML = "";
+      return;
+    }
+    state.textContent = "Buscando…";
+    resultsEl.innerHTML = "";
+
+    try{
+      const raw = await API.searchUsers(q); // ✅ ya lo tienes en api.js
+      let users = Array.isArray(raw) ? raw : (raw.users || []);
+
+      // quita los que ya están en el grupo
+      users = users.filter(u => !currentIds.has(String(u.id || u._id)));
+
+      if(!users.length){
+        state.textContent = "Sin resultados (o ya están en el grupo).";
+        return;
+      }
+      state.textContent = "";
+
+      for(const u of users){
+        const id = String(u.id || u._id);
+        const name = u.displayName || u.name || u.email || id;
+        const row = document.createElement("div");
+        row.className = "chatrow";
+        row.style.cursor = "pointer";
+
+        const picked = selected.has(id);
+
+        row.innerHTML = `
+          <div class="chatleft">
+            <div class="avatar">${(name[0]||"U").toUpperCase()}</div>
+            <div class="chatmeta">
+              <div class="title">${esc(name)}</div>
+              <div class="sub">${esc(u.email || "")}</div>
+            </div>
+          </div>
+          <div class="badge">${picked ? "✔" : "Añadir"}</div>
+        `;
+
+        row.addEventListener("click", ()=>{
+          if(selected.has(id)) selected.delete(id);
+          else selected.set(id, u);
+          // repinta badge
+          row.querySelector(".badge").textContent = selected.has(id) ? "✔" : "Añadir";
+          renderAddBtn();
+        });
+
+        resultsEl.appendChild(row);
+      }
+    }catch(e){
+      state.textContent = e.message || String(e);
+    }
+  }
+
+  // 4) ejecutar “añadir”
+  addBtn.addEventListener("click", async ()=>{
+    if(!selected.size) return;
+    state.textContent = "Añadiendo…";
+    addBtn.disabled = true;
+
+    try{
+      const ids = Array.from(selected.keys());
+
+      // ✅ llama a tu endpoint PATCH /chats/:id/members
+      await API.addGroupMembers(chatId, ids);
+
+      // refresca chat y miembros en memoria
+      const rawChat = await API.api(`/chats/${encodeURIComponent(chatId)}`);
+      CHAT = rawChat.chat || rawChat;
+      CHAT_MEMBERS = (CHAT.members || []).map(m => ({
+        id: String(m._id || m.id),
+        name: m.name || "",
+        email: m.email || "",
+        photoUrl: m.photoUrl || null,
+        status: m.status || "",
+      }));
+
+      close();
+
+      // si quieres, reabre el modal de archivos para que “se note”
+      // (o simplemente deja al user continuar)
+      alert("Participantes añadidos ✅");
+    }catch(e){
+      state.textContent = e.message || String(e);
+      addBtn.disabled = false;
+      renderAddBtn();
+    }
+  });
+  }
 
   // ---- render message
   function normalizeAttachments(m) {
