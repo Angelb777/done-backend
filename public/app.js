@@ -5,6 +5,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ------- helpers DOM
   const $ = (id) => document.getElementById(id);
 
+  function applyBottomNavPadding(){
+  const nav = document.querySelector(".bottomnav");
+  const h = nav ? nav.offsetHeight : 80;
+  document.documentElement.style.setProperty("--bottomnav-h", `${h}px`);
+  }
+  applyBottomNavPadding();
+  window.addEventListener("resize", applyBottomNavPadding);
+
   // ------- session
   $("logout")?.addEventListener("click", () => {
     API.clearToken();
@@ -796,11 +804,13 @@ async function openTaskCommentsModal({ taskId, title, taskAttachments = [] }){
 
       <div id="cPending" style="margin-top:10px;"></div>
 
-      <div class="row" style="gap:8px; margin-top:10px;">
-  <button class="btn outline" id="cAttach" type="button">📎</button>
-  <input id="cText" class="composer-input" placeholder="Escribe un comentario…" style="flex:1;" />
-  <button class="btn outline" id="cPlus" type="button">＋</button>
-  <button class="btn primary" id="cSend" type="button">Enviar</button>
+      <div class="composerbar">
+  <div class="row" style="gap:8px;">
+    <button class="btn outline" id="cAttach" type="button">📎</button>
+    <input id="cText" class="composer-input" placeholder="Escribe un comentario…" style="flex:1;" />
+    <button class="btn outline" id="cPlus" type="button">＋</button>
+    <button class="btn primary" id="cSend" type="button">Enviar</button>
+  </div>
 </div>
     </div>
   `;

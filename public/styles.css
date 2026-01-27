@@ -1438,3 +1438,72 @@ body{
 .task-red    { border-left: 6px solid #ef4444; }
 .task-blue   { border-left: 6px solid #3b82f6; }
 .task-green  { border-left: 6px solid #22c55e; }
+
+/* ===== Modal task comments/subtasks ===== */
+
+.imgmodal{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.35);
+  display:flex;
+  align-items:flex-start;
+  justify-content:center;
+  padding:18px;
+  overflow:auto;
+  z-index:9999;
+}
+
+.imgmodal-top{
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #fff;
+  padding: 10px 12px;
+  border-radius: 14px;
+  margin-bottom: 10px;
+}
+
+.imgmodal-body{
+  display:flex;
+  flex-direction:column;
+  width:min(760px, 100%);
+  max-height: calc(90vh - 20px);
+  overflow:hidden; /* clave: evita que el contenido empuje al footer fuera */
+}
+
+#cList{
+  flex: 1 1 auto;
+  overflow:auto;
+  max-height:none !important; /* mata el 48vh inline */
+}
+
+#cSubtasksPanel{
+  flex: 1 1 auto;
+  overflow:auto;
+}
+
+.composerbar{
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: #fff;
+  padding-top: 10px;
+  margin-top: 10px;
+  border-top: 1px solid rgba(0,0,0,.08);
+}
+
+/* Checkboxes del modal: tamaño fijo para que no “crezcan” */
+.imgmodal input[type="checkbox"]{
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
+
+/* Para que el contenido no quede debajo del bottom nav */
+#view-dashboard{
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+#view-dashboard{
+  padding-bottom: calc(var(--bottomnav-h, 80px) + 16px + env(safe-area-inset-bottom));
+}
