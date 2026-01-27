@@ -775,17 +775,19 @@ async function openTaskCommentsModal({ taskId, title, taskAttachments = [] }){
   const modal = document.createElement("div");
   modal.className = "imgmodal";
   modal.innerHTML = `
-    <div class="imgmodal-top" style="justify-content:space-between; gap:12px;">
-  <div style="display:flex; gap:8px; background:rgba(0,0,0,.06); padding:6px; border-radius:999px;">
-    <button class="btn tiny" id="tabComments">Comentarios</button>
-    <button class="btn tiny" id="tabSubtasks">Subtareas</button>
-  </div>
-  <button class="iconbtn" id="cClose">✕</button>
-</div>
+  <div class="imgmodal-card">
+    <!-- HEADER (sticky dentro del card, centrado) -->
+    <div class="imgmodal-top">
+      <div class="imgmodal-tabs">
+        <button class="btn tiny" id="tabComments">Comentarios</button>
+        <button class="btn tiny" id="tabSubtasks">Subtareas</button>
+      </div>
+      <button class="iconbtn" id="cClose">✕</button>
+    </div>
 
-
-    <div class="imgmodal-body" style="background:#fff; padding:14px; border-radius:14px; max-width:760px; margin:0 auto;">
-      <div style="font-weight:900; margin-bottom:10px;">${title || "Tarea"}</div>
+    <!-- CONTENT -->
+    <div class="imgmodal-body">
+      <div class="imgmodal-title">${title || "Tarea"}</div>
 
       ${taskAttachments.length ? `
         <div class="card" style="margin-bottom:12px;">
@@ -793,27 +795,32 @@ async function openTaskCommentsModal({ taskId, title, taskAttachments = [] }){
           <div id="cTaskAtts"></div>
         </div>
       ` : ""}
-      <div id="cSubtasksPanel" class="card" style="display:none; margin-bottom:12px;">
-  <div style="font-weight:900;margin-bottom:10px;">Subtareas</div>
-  <div id="cSubtasksState" class="state"></div>
-  <div id="cSubtasksList"></div>
-</div>
 
-      <div id="cState" class="state" style="margin:6px 0;"></div>
-      <div id="cList" style="max-height:48vh; overflow:auto; padding-right:6px;"></div>
+      <!-- ZONA SCROLL (aquí viven comentarios/subtareas) -->
+      <div class="imgmodal-scroll">
+        <div id="cSubtasksPanel" class="card" style="display:none; margin-bottom:12px;">
+          <div style="font-weight:900;margin-bottom:10px;">Subtareas</div>
+          <div id="cSubtasksState" class="state"></div>
+          <div id="cSubtasksList"></div>
+        </div>
 
-      <div id="cPending" style="margin-top:10px;"></div>
+        <div id="cState" class="state" style="margin:6px 0;"></div>
+        <div id="cList"></div>
 
-      <div class="composerbar">
-  <div class="row" style="gap:8px;">
-    <button class="btn outline" id="cAttach" type="button">📎</button>
-    <input id="cText" class="composer-input" placeholder="Escribe un comentario…" style="flex:1;" />
-    <button class="btn outline" id="cPlus" type="button">＋</button>
-    <button class="btn primary" id="cSend" type="button">Enviar</button>
-  </div>
-</div>
+        <div id="cPending" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- COMPOSER FIJO ABAJO -->
+      <div class="imgmodal-compose">
+        <button class="btn outline" id="cAttach" type="button">📎</button>
+        <input id="cText" class="composer-input" placeholder="Escribe un comentario…" style="flex:1;" />
+        <button class="btn outline" id="cPlus" type="button">＋</button>
+        <button class="btn primary" id="cSend" type="button">Enviar</button>
+      </div>
     </div>
-  `;
+  </div>
+`;
+
 
   document.body.appendChild(modal);
 
@@ -841,12 +848,13 @@ function setTab(name){
   tab = name;
   const isSub = tab === "subtasks";
 
-  // UI
   if (cSubtasksPanel) cSubtasksPanel.style.display = isSub ? "" : "none";
+  if (cList) cList.style.display = isSub ? "none" : "";
+  if (cState) cState.style.display = isSub ? "none" : "";
+
   if (tabComments) tabComments.style.background = !isSub ? "#fff" : "transparent";
   if (tabSubtasks) tabSubtasks.style.background = isSub ? "#fff" : "transparent";
 
-  // placeholder
   if (cText) cText.placeholder = isSub ? "Nueva subtarea…" : (pending.length ? "Añade un texto (opcional)…" : "Escribe un comentario…");
 
   if (isSub && !subtasksLoading) loadSubtasks();

@@ -1507,3 +1507,79 @@ body{
 #view-dashboard{
   padding-bottom: calc(var(--bottomnav-h, 80px) + 16px + env(safe-area-inset-bottom));
 }
+/* ===== Task modal layout fix ===== */
+.imgmodal{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  z-index: 9999;
+}
+
+.imgmodal-card{
+  width: min(960px, 96vw);
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 12px 60px rgba(0,0,0,.25);
+  overflow: hidden;
+}
+
+.imgmodal-top{
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  border-bottom: 1px solid rgba(0,0,0,.06);
+}
+
+.imgmodal-top #cClose{
+  position: absolute;
+  right: 14px;
+}
+
+.imgmodal-tabs{
+  display: flex;
+  gap: 8px;
+  background: rgba(0,0,0,.06);
+  padding: 6px;
+  border-radius: 999px;
+}
+
+.imgmodal-body{
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  max-height: 82vh; /* clave */
+}
+
+.imgmodal-title{
+  font-weight: 900;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.imgmodal-scroll{
+  flex: 1;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+#cList{
+  margin-top: 6px;
+}
+
+.imgmodal-compose{
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0,0,0,.06);
+  background: #fff;
+}
