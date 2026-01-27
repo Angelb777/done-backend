@@ -3,11 +3,15 @@ const { auth } = require("../middleware/auth");
 const Task = require("../models/Task");
 const Chat = require("../models/Chat");
 const TaskComment = require("../models/TaskComment");
+const User = require("../models/User");
 const { TASK_STATUS, TASK_COLORS } = require("../utils/constants");
 const { upload, toPublicUrl } = require("../utils/upload");
 
 const router = express.Router();
 
+// ----------------------------------------------------
+// Helpers perms / membership
+// ----------------------------------------------------
 async function assertMemberByChatId(chatId, userId) {
   const chat = await Chat.findById(chatId).select("_id members");
   if (!chat) return { ok: false, code: 404, error: "Chat not found" };
@@ -28,6 +32,44 @@ function canEdit(task, userId) {
   return assignees.includes(me) || String(task.assignee) === me || String(task.creator) === me;
 }
 
+// ✅ Admin: por role en DB o por ADMIN_EMAILS del .env (como tu /me)
+async function isAdmin(req) {
+  try {
+    const userId = String(req.user?.id || "");
+    if (!userId) return false;
+
+    const u = await User.findById(userId).select("email role");
+    if (!u) return false;
+
+    if (String(u.role || "").toLowerCase() === "admin") return true;
+
+    const adminList = (process.env.ADMIN_EMAILS || "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+
+    return adminList.includes(String(u.email || "").toLowerCase());
+  } catch (_) {
+    return false;
+  }
+}
+
+// ✅ Solo se puede borrar si está en “Historial”
+function isHistoryTask(task) {
+  // Historial = DONE + (archivedAt != null OR completedAt < now-24h)
+  if (!task) return false;
+  if (String(task.status) !== TASK_STATUS.DONE) return false;
+
+  const now = Date.now();
+  const since = now - 24 * 60 * 60 * 1000;
+
+  const archived = task.archivedAt != null;
+  const completedAtMs = task.completedAt ? new Date(task.completedAt).getTime() : null;
+  const oldDone = completedAtMs != null && completedAtMs < since;
+
+  return archived || oldDone;
+}
+
 /**
  * PATCH/POST /tasks/:taskId/toggle
  * - PENDING => DONE (completedAt=now, archivedAt=null)
@@ -38,7 +80,9 @@ async function toggleHandler(req, res, next) {
     const userId = String(req.user.id);
     const { taskId } = req.params;
 
-    const task = await Task.findById(taskId).select("_id chat status assignee assignees creator completedAt archivedAt");
+    const task = await Task.findById(taskId).select(
+      "_id chat status assignee assignees creator completedAt archivedAt"
+    );
     if (!task) return res.status(404).json({ error: "Task not found" });
 
     if (!canEdit(task, userId)) return res.status(403).json({ error: "Forbidden" });
@@ -74,7 +118,7 @@ async function toggleHandler(req, res, next) {
 }
 
 router.patch("/:taskId/toggle", auth, toggleHandler);
-router.post("/:taskId/toggle", auth, toggleHandler); // ✅ por compatibilidad
+router.post("/:taskId/toggle", auth, toggleHandler);
 
 /**
  * PATCH/POST /tasks/:taskId/archive
@@ -86,7 +130,9 @@ async function archiveHandler(req, res, next) {
     const userId = String(req.user.id);
     const { taskId } = req.params;
 
-    const task = await Task.findById(taskId).select("_id chat status assignee assignees creator archivedAt completedAt");
+    const task = await Task.findById(taskId).select(
+      "_id chat status assignee assignees creator archivedAt completedAt"
+    );
     if (!task) return res.status(404).json({ error: "Task not found" });
 
     if (!canEdit(task, userId)) return res.status(403).json({ error: "Forbidden" });
@@ -110,14 +156,60 @@ async function archiveHandler(req, res, next) {
 }
 
 router.patch("/:taskId/archive", auth, archiveHandler);
-router.post("/:taskId/archive", auth, archiveHandler); // ✅ por compatibilidad
+router.post("/:taskId/archive", auth, archiveHandler);
+
+// ----------------------------------------------------
+// ✅ DELETE /tasks/:taskId  (BORRAR, solo Historial)
+// Reglas:
+// - Debe ser miembro del chat
+// - Debe estar en historial (archivedAt o DONE viejo)
+// - Permisos: creator o admin
+// - Borra también comments
+// ----------------------------------------------------
+router.delete("/:taskId", auth, async (req, res, next) => {
+  try {
+    const userId = String(req.user.id);
+    const { taskId } = req.params;
+
+    const task = await Task.findById(taskId).select(
+      "_id chat status creator completedAt archivedAt"
+    );
+    if (!task) return res.status(404).json({ error: "Task not found" });
+
+    // miembro del chat
+    const mem = await assertMember(task, userId);
+    if (!mem.ok) return res.status(mem.code).json({ error: mem.error });
+
+    // solo historial
+    if (!isHistoryTask(task)) {
+      return res.status(400).json({ error: "Only history tasks can be deleted" });
+    }
+
+    // permisos: creator o admin
+    const isCreator = String(task.creator) === userId;
+    const admin = await isAdmin(req);
+
+    if (!isCreator && !admin) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    // borra comments asociados
+    await TaskComment.deleteMany({ task: taskId });
+
+    // borra task
+    await Task.deleteOne({ _id: taskId });
+
+    return res.json({ ok: true, deletedTaskId: String(taskId) });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // ----------------------------------------------------
 // ✅ COMMENTS
 // GET  /tasks/:taskId/comments?limit=30&before=ISO_DATE
 // POST /tasks/:taskId/comments  (multipart) fields: text, files[]
 // ----------------------------------------------------
-
 router.get("/:taskId/comments", auth, async (req, res, next) => {
   try {
     const userId = String(req.user.id);
@@ -246,7 +338,6 @@ router.patch("/:taskId", auth, async (req, res, next) => {
 
     if (!task) return res.status(404).json({ error: "Task not found" });
 
-    // Permiso: creador o responsable (assignee) o dentro de assignees
     const isCreator = String(task.creator?._id || task.creator) === userId;
     const isAssignee = String(task.assignee?._id || task.assignee) === userId;
     const isInAssignees = Array.isArray(task.assignees)
@@ -257,13 +348,11 @@ router.patch("/:taskId", auth, async (req, res, next) => {
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    // dueDate: si llega null => borrar
     if ("dueDate" in req.body) {
       const dueDate = req.body.dueDate;
       task.dueDate = dueDate ? new Date(dueDate) : null;
     }
 
-    // color: validar contra TASK_COLORS (strings)
     if ("color" in req.body) {
       const c = String(req.body.color || "").trim();
       if (!TASK_COLORS.includes(c)) {
@@ -274,7 +363,6 @@ router.patch("/:taskId", auth, async (req, res, next) => {
 
     await task.save();
 
-    // Respuesta simple, estable, para Flutter
     return res.json({
       ok: true,
       task: {
@@ -308,6 +396,5 @@ router.patch("/:taskId", auth, async (req, res, next) => {
     next(e);
   }
 });
-
 
 module.exports = router;
