@@ -776,7 +776,8 @@ async function openTaskCommentsModal({ taskId, title, taskAttachments = [] }){
   modal.className = "imgmodal";
   modal.innerHTML = `
   <div class="imgmodal-card">
-    <!-- HEADER (sticky dentro del card, centrado) -->
+
+    <!-- HEADER -->
     <div class="imgmodal-top">
       <div class="imgmodal-tabs">
         <button class="btn tiny" id="tabComments">Comentarios</button>
@@ -785,8 +786,10 @@ async function openTaskCommentsModal({ taskId, title, taskAttachments = [] }){
       <button class="iconbtn" id="cClose">✕</button>
     </div>
 
-    <!-- CONTENT -->
+    <!-- BODY -->
     <div class="imgmodal-body">
+
+      <!-- TÍTULO -->
       <div class="imgmodal-title">${title || "Tarea"}</div>
 
       ${taskAttachments.length ? `
@@ -796,7 +799,7 @@ async function openTaskCommentsModal({ taskId, title, taskAttachments = [] }){
         </div>
       ` : ""}
 
-      <!-- ZONA SCROLL (aquí viven comentarios/subtareas) -->
+      <!-- SCROLL -->
       <div class="imgmodal-scroll">
         <div id="cSubtasksPanel" class="card" style="display:none; margin-bottom:12px;">
           <div style="font-weight:900;margin-bottom:10px;">Subtareas</div>
@@ -806,17 +809,17 @@ async function openTaskCommentsModal({ taskId, title, taskAttachments = [] }){
 
         <div id="cState" class="state" style="margin:6px 0;"></div>
         <div id="cList"></div>
-
         <div id="cPending" style="margin-top:10px;"></div>
       </div>
 
-      <!-- COMPOSER FIJO ABAJO -->
+      <!-- COMPOSER -->
       <div class="imgmodal-compose">
         <button class="btn outline" id="cAttach" type="button">📎</button>
-        <input id="cText" class="composer-input" placeholder="Escribe un comentario…" style="flex:1;" />
+        <input id="cText" class="composer-input" placeholder="Escribe un comentario…" />
         <button class="btn outline" id="cPlus" type="button">＋</button>
         <button class="btn primary" id="cSend" type="button">Enviar</button>
       </div>
+
     </div>
   </div>
 `;

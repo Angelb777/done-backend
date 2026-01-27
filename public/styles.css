@@ -1583,3 +1583,28 @@ body{
   border-top: 1px solid rgba(0,0,0,.06);
   background: #fff;
 }
+.imgmodal-title{
+  text-align:center;
+  width:100%;
+}
+.imgmodal-card{
+  margin: 0 auto;
+}
+
+#cSubtasksPanel{
+  max-width: 720px;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+.imgmodal-compose{
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+.imgmodal-scroll{
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
