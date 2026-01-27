@@ -1433,3 +1433,8 @@ body{
 
 .tasktile.draggable { cursor: grab; }
 .tasktile.dragging { opacity: .65; cursor: grabbing; }
+.task-gray   { border-left: 6px solid #9ca3af; }
+.task-yellow { border-left: 6px solid #facc15; }
+.task-red    { border-left: 6px solid #ef4444; }
+.task-blue   { border-left: 6px solid #3b82f6; }
+.task-green  { border-left: 6px solid #22c55e; }

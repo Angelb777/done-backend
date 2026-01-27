@@ -532,8 +532,21 @@ function pct(done, total){
 
 function progress(tasks){
   if(!Array.isArray(tasks) || !tasks.length) return 0;
-  const doneCount = tasks.filter(t => String(t.status||"").toUpperCase()==="DONE").length;
-  return doneCount / tasks.length;
+
+  let done = 0;
+  let total = 0;
+
+  for(const t of tasks){
+    const subs = t.subtasks || [];
+    if(subs.length){
+      total += subs.length;
+      done += subs.filter(s => s.done).length;
+    } else {
+      total += 1;
+      if(isDoneTask(t)) done += 1;
+    }
+  }
+  return total ? done / total : 0;
 }
 
 const TASK_COLOR_KEYS = ["gray", "yellow", "red", "blue", "green"];
@@ -996,23 +1009,25 @@ setTab("comments");
     return box;
   }
 
-  async function loadComments(){
-    try{
-      cState.textContent = "Cargando…";
-      const raw = await API.getTaskComments(taskId, 50);
-      const list = Array.isArray(raw) ? raw : (raw.comments || raw.items || []);
-      cList.innerHTML = "";
-      if(!list.length){
-        cState.textContent = "Aún no hay comentarios.";
-      } else {
-        cState.textContent = "";
-        for(const c of list) cList.appendChild(renderComment(c));
-        cList.scrollTop = cList.scrollHeight;
-      }
-    }catch(e){
-      cState.textContent = e.message || String(e);
+  async function loadComments({silent=false} = {}){
+  try{
+    if(!silent) cState.textContent = "Cargando…";
+
+    const raw = await API.getTaskComments(taskId, 50);
+    const list = Array.isArray(raw) ? raw : (raw.comments || []);
+    cList.innerHTML = "";
+
+    if(!list.length){
+      cState.textContent = silent ? "" : "Aún no hay comentarios.";
+    } else {
+      cState.textContent = "";
+      for(const c of list) cList.appendChild(renderComment(c));
+      cList.scrollTop = cList.scrollHeight;
     }
+  }catch(e){
+    cState.textContent = e.message || String(e);
   }
+}
 
   cAttach.addEventListener("click", ()=>{
     const tmp = document.createElement("input");
@@ -1070,7 +1085,7 @@ setTab("comments");
   });
 
   await loadComments();
-  poll = setInterval(loadComments, 3500);
+  poll = setInterval(() => loadComments({ silent:true }), 3500);
 }
 
 function renderTaskTile(t, {showHistory=false}){
@@ -1080,6 +1095,10 @@ function renderTaskTile(t, {showHistory=false}){
 
   const tile = document.createElement("div");
   tile.className = "tasktile";
+  const color = String(t.color || "gray");
+  tile.dataset.color = color;
+  tile.classList.add(`task-${color}`);
+
 
   const left = document.createElement("div");
   left.className = "taskleft";
@@ -1298,10 +1317,19 @@ function renderSection({mountId, title, subtitle, progressValue, showProgress, t
     head.appendChild(p);
   }
 
-  mount.appendChild(head);
-
   const body = document.createElement("div");
   body.className = "secbody";
+
+  let collapsed = false;
+
+head.style.cursor = "pointer";
+head.addEventListener("click", (e) => {
+  if (e.target.closest("button")) return; // no plegar si clicas un botón
+  collapsed = !collapsed;
+  body.style.display = collapsed ? "none" : "";
+});
+
+  mount.appendChild(head);
 
   if(!tasks.length){
     const em = document.createElement("div");
@@ -1390,8 +1418,8 @@ async function loadDashboard(){
     // ⚠️ tu backend Flutter usa Api.getDashboardRaw(tab: 'TAREAS'|'HISTORIAL')
     // así que aquí lo pedimos igual:
     const data = await API.getDashboard(dashTab); // 👈 ver api.js abajo
-    const mine = orderTasks((data.mine || []).slice());
-    const assigned = orderTasks((data.assignedByMe || []).slice());
+    const mine = (data.mine || []).slice();
+    const assigned = (data.assignedByMe || []).slice();
 
     const showHistory = dashTab === "HISTORIAL";
 
