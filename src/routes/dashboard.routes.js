@@ -1,6 +1,10 @@
+// src/routes/dashboard.routes.js
 const express = require("express");
+const mongoose = require("mongoose");
 const { auth } = require("../middleware/auth");
+
 const Task = require("../models/Task");
+const TaskSubtask = require("../models/TaskSubtask"); // ✅ NUEVO
 const User = require("../models/User");
 const { TASK_STATUS } = require("../utils/constants");
 
@@ -20,6 +24,9 @@ const router = express.Router();
  * Returns:
  *  - mine: tasks where assignee = me
  *  - assignedByMe: tasks where creator = me AND assignee != me
+ *
+ * ✅ NUEVO:
+ *  - subtasks: { total, done } (o null si no hay)
  */
 router.get("/", auth, async (req, res, next) => {
   try {
@@ -70,53 +77,6 @@ router.get("/", auth, async (req, res, next) => {
       });
     }
 
-    function mapTask(t) {
-      const atts = Array.isArray(t.attachments) ? t.attachments : [];
-
-      return {
-        id: String(t._id),
-        title: t.title,
-        color: t.color,
-        status: t.status,
-        dueDate: t.dueDate || null,
-        createdAt: t.createdAt || null,
-        completedAt: t.completedAt || null,
-        archivedAt: t.archivedAt || null,
-        attachments: atts
-          .map((a) => ({
-            url: a?.url || a?.path || "",
-            name: a?.name || a?.filename || "",
-            mime: a?.mime || a?.mimetype || a?.mimeType || a?.contentType || "",
-            size: Number(a?.size || 0),
-          }))
-          .filter((a) => String(a.url).trim().length > 0),
-        chat: t.chat
-          ? {
-              id: String(t.chat._id),
-              title: t.chat.type === "GROUP" ? t.chat.title || "Grupo" : null,
-              type: t.chat.type,
-            }
-          : null,
-        creator: t.creator
-          ? {
-              id: String(t.creator._id),
-              name: t.creator.name,
-              email: t.creator.email,
-              photoUrl: t.creator.photoUrl || null,
-            }
-          : null,
-        assignee: t.assignee
-          ? {
-              id: String(t.assignee._id),
-              name: t.assignee.name,
-              email: t.assignee.email,
-              photoUrl: t.assignee.photoUrl || null,
-            }
-          : null,
-        messageId: t.message,
-      };
-    }
-
     const selectFields =
       "_id title color status dueDate chat creator assignee message createdAt completedAt archivedAt attachments";
 
@@ -127,125 +87,107 @@ router.get("/", auth, async (req, res, next) => {
       .select(selectFields)
       .lean();
 
-    const assignedRaw = await Task.find(
-      buildFilter({ creator: userId, assignee: { $ne: userId } })
-    )
+    const assignedRaw = await Task.find(buildFilter({ creator: userId, assignee: { $ne: userId } }))
       .populate("creator", "name email photoUrl")
       .populate("assignee", "name email photoUrl")
       .populate("chat", "type title")
       .select(selectFields)
       .lean();
 
+    // ----------------------------------------------------
+    // ✅ Progreso de subtareas (1 query para todas las tasks)
+    // ----------------------------------------------------
+    const allTaskIdsStr = [
+      ...mineRaw.map((t) => String(t._id)),
+      ...assignedRaw.map((t) => String(t._id)),
+    ];
+
+    const allTaskIds = allTaskIdsStr
+      .filter(Boolean)
+      .map((id) => new mongoose.Types.ObjectId(id));
+
+    const subtaskByTaskId = new Map(); // taskId -> { total, done }
+
+    if (allTaskIds.length > 0) {
+      const agg = await TaskSubtask.aggregate([
+        { $match: { task: { $in: allTaskIds } } },
+        {
+          $group: {
+            _id: "$task",
+            total: { $sum: 1 },
+            done: { $sum: { $cond: ["$done", 1, 0] } },
+          },
+        },
+      ]);
+
+      for (const r of agg) {
+        subtaskByTaskId.set(String(r._id), {
+          total: Number(r.total || 0),
+          done: Number(r.done || 0),
+        });
+      }
+    }
+
+    function mapTask(t) {
+      const atts = Array.isArray(t.attachments) ? t.attachments : [];
+      const st = subtaskByTaskId.get(String(t._id)) || { total: 0, done: 0 };
+
+      return {
+        id: String(t._id),
+        title: t.title,
+        color: t.color,
+        status: t.status,
+        dueDate: t.dueDate || null,
+        createdAt: t.createdAt || null,
+        completedAt: t.completedAt || null,
+        archivedAt: t.archivedAt || null,
+
+        // ✅ NUEVO: progreso subtareas (null si no hay)
+        subtasks: st.total > 0 ? st : null,
+
+        attachments: atts
+          .map((a) => ({
+            url: a?.url || a?.path || "",
+            name: a?.name || a?.filename || "",
+            mime: a?.mime || a?.mimetype || a?.mimeType || a?.contentType || "",
+            size: Number(a?.size || 0),
+          }))
+          .filter((a) => String(a.url).trim().length > 0),
+
+        chat: t.chat
+          ? {
+              id: String(t.chat._id),
+              title: t.chat.type === "GROUP" ? t.chat.title || "Grupo" : null,
+              type: t.chat.type,
+            }
+          : null,
+
+        creator: t.creator
+          ? {
+              id: String(t.creator._id),
+              name: t.creator.name,
+              email: t.creator.email,
+              photoUrl: t.creator.photoUrl || null,
+            }
+          : null,
+
+        assignee: t.assignee
+          ? {
+              id: String(t.assignee._id),
+              name: t.assignee.name,
+              email: t.assignee.email,
+              photoUrl: t.assignee.photoUrl || null,
+            }
+          : null,
+
+        messageId: t.message,
+      };
+    }
+
     return res.json({
       tab,
       mine: applyOrderStable(mineRaw, pendingOrder).map(mapTask),
       assignedByMe: applyOrderStable(assignedRaw, requestedOrder).map(mapTask),
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-
-function mapTask(t) {
-  const atts = Array.isArray(t.attachments) ? t.attachments : [];
-
-  return {
-    id: t._id,
-    title: t.title,
-    color: t.color,
-    status: t.status,
-    dueDate: t.dueDate || null,
-    createdAt: t.createdAt,
-    completedAt: t.completedAt || null,
-    archivedAt: t.archivedAt || null,
-
-    // ✅ NUEVO: adjuntos de la tarea
-    attachments: atts
-      .map((a) => ({
-        url: a?.url || a?.path || "",
-        name: a?.name || a?.filename || "",
-        mime: a?.mime || a?.mimetype || a?.mimeType || a?.contentType || "",
-        size: Number(a?.size || 0),
-      }))
-      .filter((a) => String(a.url).trim().length > 0),
-
-    chat: t.chat
-      ? {
-          id: t.chat._id,
-          title: t.chat.type === "GROUP" ? t.chat.title || "Grupo" : null,
-          type: t.chat.type,
-        }
-      : null,
-
-    creator: t.creator
-      ? {
-          id: t.creator._id,
-          name: t.creator.name,
-          email: t.creator.email,
-          photoUrl: t.creator.photoUrl || null,
-        }
-      : null,
-
-    assignee: t.assignee
-      ? {
-          id: t.assignee._id,
-          name: t.assignee.name,
-          email: t.assignee.email,
-          photoUrl: t.assignee.photoUrl || null,
-        }
-      : null,
-
-    messageId: t.message,
-  };
-}
-
-/**
- * PATCH /tasks/:taskId
- * body: { dueDate?: string|null, color?: number }
- */
-router.patch("/:taskId", auth, async (req, res, next) => {
-  try {
-    const userId = String(req.user.id);
-    const { taskId } = req.params;
-
-    const task = await Task.findById(taskId).select("_id chat status assignee assignees creator dueDate color");
-    if (!task) return res.status(404).json({ error: "Task not found" });
-
-    if (!canEdit(task, userId)) return res.status(403).json({ error: "Forbidden" });
-
-    const mem = await assertMember(task, userId);
-    if (!mem.ok) return res.status(mem.code).json({ error: mem.error });
-
-    // dueDate
-    if ("dueDate" in req.body) {
-      const v = req.body.dueDate;
-      if (v === null || v === "" || v === "null") {
-        task.dueDate = null;
-      } else {
-        const d = new Date(String(v));
-        if (Number.isNaN(d.getTime())) return res.status(400).json({ error: "Invalid dueDate" });
-        task.dueDate = d;
-      }
-    }
-
-    // color 0..9
-    if ("color" in req.body) {
-      const c = Number(req.body.color);
-      if (!Number.isFinite(c) || c < 0 || c > 9) {
-        return res.status(400).json({ error: "Invalid color (0..9)" });
-      }
-      task.color = c;
-    }
-
-    await task.save();
-
-    return res.json({
-      task: {
-        id: String(task._id),
-        dueDate: task.dueDate || null,
-        color: typeof task.color === "number" ? task.color : 0,
-      },
     });
   } catch (err) {
     next(err);

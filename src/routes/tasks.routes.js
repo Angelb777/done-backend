@@ -3,6 +3,7 @@ const { auth } = require("../middleware/auth");
 const Task = require("../models/Task");
 const Chat = require("../models/Chat");
 const TaskComment = require("../models/TaskComment");
+const TaskSubtask = require("../models/TaskSubtask");
 const User = require("../models/User");
 const { TASK_STATUS, TASK_COLORS } = require("../utils/constants");
 const { upload, toPublicUrl } = require("../utils/upload");
@@ -196,12 +197,150 @@ router.delete("/:taskId", auth, async (req, res, next) => {
     // borra comments asociados
     await TaskComment.deleteMany({ task: taskId });
 
+    await TaskSubtask.deleteMany({ task: taskId });
+
     // borra task
     await Task.deleteOne({ _id: taskId });
 
     return res.json({ ok: true, deletedTaskId: String(taskId) });
   } catch (err) {
     next(err);
+  }
+});
+
+// ----------------------------------------------------
+// ✅ SUBTASKS
+// GET  /tasks/:taskId/subtasks
+// POST /tasks/:taskId/subtasks { text }
+// PATCH /tasks/:taskId/subtasks/:subtaskId/toggle
+// DELETE /tasks/:taskId/subtasks/:subtaskId
+// ----------------------------------------------------
+
+router.get("/:taskId/subtasks", auth, async (req, res, next) => {
+  try {
+    const userId = String(req.user.id);
+    const { taskId } = req.params;
+
+    const task = await Task.findById(taskId).select("_id chat");
+    if (!task) return res.status(404).json({ error: "Task not found" });
+
+    const mem = await assertMember(task, userId);
+    if (!mem.ok) return res.status(mem.code).json({ error: mem.error });
+
+    const subtasks = await TaskSubtask.find({ task: taskId }).sort({ createdAt: 1 });
+
+    return res.json({
+      subtasks: subtasks.map((s) => ({
+        id: String(s._id),
+        taskId: String(s.task),
+        chatId: String(s.chat),
+        text: s.text,
+        done: !!s.done,
+        doneAt: s.doneAt || null,
+        createdAt: s.createdAt,
+      })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post("/:taskId/subtasks", auth, async (req, res, next) => {
+  try {
+    const userId = String(req.user.id);
+    const { taskId } = req.params;
+
+    const text = String(req.body.text || "").trim();
+    if (!text) return res.status(400).json({ error: "text required" });
+
+    const task = await Task.findById(taskId).select("_id chat assignee assignees creator");
+    if (!task) return res.status(404).json({ error: "Task not found" });
+
+    const mem = await assertMember(task, userId);
+    if (!mem.ok) return res.status(mem.code).json({ error: mem.error });
+
+    // Si quieres: solo quien puede editar la task puede crear subtareas
+    if (!canEdit(task, userId)) return res.status(403).json({ error: "Forbidden" });
+
+    const sub = await TaskSubtask.create({
+      task: taskId,
+      chat: task.chat,
+      creator: userId,
+      text,
+      done: false,
+      doneAt: null,
+    });
+
+    return res.json({
+      subtask: {
+        id: String(sub._id),
+        taskId: String(sub.task),
+        chatId: String(sub.chat),
+        text: sub.text,
+        done: !!sub.done,
+        doneAt: sub.doneAt || null,
+        createdAt: sub.createdAt,
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.patch("/:taskId/subtasks/:subtaskId/toggle", auth, async (req, res, next) => {
+  try {
+    const userId = String(req.user.id);
+    const { taskId, subtaskId } = req.params;
+
+    const task = await Task.findById(taskId).select("_id chat assignee assignees creator");
+    if (!task) return res.status(404).json({ error: "Task not found" });
+
+    const mem = await assertMember(task, userId);
+    if (!mem.ok) return res.status(mem.code).json({ error: mem.error });
+
+    if (!canEdit(task, userId)) return res.status(403).json({ error: "Forbidden" });
+
+    const sub = await TaskSubtask.findOne({ _id: subtaskId, task: taskId });
+    if (!sub) return res.status(404).json({ error: "Subtask not found" });
+
+    sub.done = !sub.done;
+    sub.doneAt = sub.done ? new Date() : null;
+    await sub.save();
+
+    return res.json({
+      subtask: {
+        id: String(sub._id),
+        taskId: String(sub.task),
+        chatId: String(sub.chat),
+        text: sub.text,
+        done: !!sub.done,
+        doneAt: sub.doneAt || null,
+        createdAt: sub.createdAt,
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.delete("/:taskId/subtasks/:subtaskId", auth, async (req, res, next) => {
+  try {
+    const userId = String(req.user.id);
+    const { taskId, subtaskId } = req.params;
+
+    const task = await Task.findById(taskId).select("_id chat assignee assignees creator");
+    if (!task) return res.status(404).json({ error: "Task not found" });
+
+    const mem = await assertMember(task, userId);
+    if (!mem.ok) return res.status(mem.code).json({ error: mem.error });
+
+    if (!canEdit(task, userId)) return res.status(403).json({ error: "Forbidden" });
+
+    await TaskSubtask.deleteOne({ _id: subtaskId, task: taskId });
+
+    return res.json({ ok: true, deletedSubtaskId: String(subtaskId) });
+  } catch (e) {
+    next(e);
   }
 });
 
