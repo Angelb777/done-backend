@@ -1477,11 +1477,6 @@ body{
   max-height:none !important; /* mata el 48vh inline */
 }
 
-#cSubtasksPanel{
-  flex: 1 1 auto;
-  overflow:auto;
-}
-
 .composerbar{
   position: sticky;
   bottom: 0;
@@ -1565,24 +1560,10 @@ body{
   margin-bottom: 12px;
 }
 
-.imgmodal-scroll{
-  flex: 1;
-  overflow: auto;
-  padding-right: 6px;
-}
-
 #cList{
   margin-top: 6px;
 }
 
-.imgmodal-compose{
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(0,0,0,.06);
-  background: #fff;
-}
 .imgmodal-title{
   text-align:center;
   width:100%;
@@ -1596,15 +1577,39 @@ body{
   margin-left: auto !important;
   margin-right: auto !important;
 }
-.imgmodal-compose{
-  max-width: 720px;
-  margin-left: auto;
-  margin-right: auto;
-  width: 100%;
+.imgmodal-body{
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  max-height: 82vh;
 }
+
+/* ✅ contenedor centrado real */
+.imgmodal-inner{
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* clave para que el scroll funcione */
+}
+
+/* el scroll debe crecer dentro del inner */
 .imgmodal-scroll{
-  max-width: 720px;
-  margin-left: auto;
-  margin-right: auto;
+  flex: 1;
+  overflow: auto;
+  padding-right: 6px;
+  min-height: 0; /* clave */
+}
+
+/* composer a ancho del inner */
+.imgmodal-compose{
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0,0,0,.06);
+  background: #fff;
   width: 100%;
 }
+

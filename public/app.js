@@ -788,42 +788,48 @@ async function openTaskCommentsModal({ taskId, title, taskAttachments = [] }){
 
     <!-- BODY -->
     <div class="imgmodal-body">
+      <!-- 🔑 CONTENEDOR CENTRADO -->
+      <div class="imgmodal-inner">
 
-      <!-- TÍTULO -->
-      <div class="imgmodal-title">${title || "Tarea"}</div>
+        <!-- TÍTULO -->
+        <div class="imgmodal-title">${title || "Tarea"}</div>
 
-      ${taskAttachments.length ? `
-        <div class="card" style="margin-bottom:12px;">
-          <div style="font-weight:900;margin-bottom:10px;">Archivos de la tarea</div>
-          <div id="cTaskAtts"></div>
+        ${taskAttachments.length ? `
+          <div class="card" style="margin-bottom:12px;">
+            <div style="font-weight:900;margin-bottom:10px;">Archivos de la tarea</div>
+            <div id="cTaskAtts"></div>
+          </div>
+        ` : ""}
+
+        <!-- ZONA SCROLL -->
+        <div class="imgmodal-scroll">
+          <div id="cSubtasksPanel" class="card" style="display:none; margin-bottom:12px;">
+            <div style="font-weight:900;margin-bottom:10px;">Subtareas</div>
+            <div id="cSubtasksState" class="state"></div>
+            <div id="cSubtasksList"></div>
+          </div>
+
+          <div id="cState" class="state" style="margin:6px 0;"></div>
+          <div id="cList"></div>
+          <div id="cPending" style="margin-top:10px;"></div>
         </div>
-      ` : ""}
 
-      <!-- SCROLL -->
-      <div class="imgmodal-scroll">
-        <div id="cSubtasksPanel" class="card" style="display:none; margin-bottom:12px;">
-          <div style="font-weight:900;margin-bottom:10px;">Subtareas</div>
-          <div id="cSubtasksState" class="state"></div>
-          <div id="cSubtasksList"></div>
+        <!-- COMPOSER -->
+        <div class="imgmodal-compose">
+          <button class="btn outline" id="cAttach" type="button">📎</button>
+          <input
+            id="cText"
+            class="composer-input"
+            placeholder="Escribe un comentario…"
+          />
+          <button class="btn outline" id="cPlus" type="button">＋</button>
+          <button class="btn primary" id="cSend" type="button">Enviar</button>
         </div>
 
-        <div id="cState" class="state" style="margin:6px 0;"></div>
-        <div id="cList"></div>
-        <div id="cPending" style="margin-top:10px;"></div>
       </div>
-
-      <!-- COMPOSER -->
-      <div class="imgmodal-compose">
-        <button class="btn outline" id="cAttach" type="button">📎</button>
-        <input id="cText" class="composer-input" placeholder="Escribe un comentario…" />
-        <button class="btn outline" id="cPlus" type="button">＋</button>
-        <button class="btn primary" id="cSend" type="button">Enviar</button>
-      </div>
-
     </div>
   </div>
 `;
-
 
   document.body.appendChild(modal);
 
