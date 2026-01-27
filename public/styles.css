@@ -1430,3 +1430,6 @@ body{
   font-size:18px;
   opacity:.75;
 }
+
+.tasktile.draggable { cursor: grab; }
+.tasktile.dragging { opacity: .65; cursor: grabbing; }

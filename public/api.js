@@ -224,6 +224,55 @@ async function leaveGroup(chatId){
   });
 }
 
+async function getDashboard(tab = "TAREAS") {
+  return api(`/dashboard?tab=${encodeURIComponent(tab)}`);
+}
+
+async function saveTaskOrder(section, ids) {
+  return api(`/me/task-order`, {
+    method: "PATCH",
+    body: JSON.stringify({ section, ids }),
+  });
+}
+
+async function updateTask(taskId, patch) {
+  return api(`/tasks/${encodeURIComponent(taskId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch || {}),
+  });
+}
+
+async function deleteTask(taskId) {
+  return api(`/tasks/${encodeURIComponent(taskId)}`, {
+    method: "DELETE",
+  });
+}
+
+// ---- SUBTASKS
+async function getSubtasks(taskId) {
+  return api(`/tasks/${encodeURIComponent(taskId)}/subtasks`);
+}
+
+async function createSubtask(taskId, text) {
+  return api(`/tasks/${encodeURIComponent(taskId)}/subtasks`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+}
+
+async function toggleSubtask(taskId, subtaskId) {
+  return api(`/tasks/${encodeURIComponent(taskId)}/subtasks/${encodeURIComponent(subtaskId)}/toggle`, {
+    method: "PATCH",
+    body: JSON.stringify({}),
+  });
+}
+
+async function deleteSubtask(taskId, subtaskId) {
+  return api(`/tasks/${encodeURIComponent(taskId)}/subtasks/${encodeURIComponent(subtaskId)}`, {
+    method: "DELETE",
+  });
+}
+
 
 // =======================
 // EXPORT GLOBAL
@@ -260,4 +309,12 @@ window.DONE_API = {
 
   addGroupMembers,
   leaveGroup,
+  getDashboard,
+  saveTaskOrder,
+  updateTask,
+  deleteTask,
+  getSubtasks,
+  createSubtask,
+  toggleSubtask,
+  deleteSubtask,
 };

@@ -27,7 +27,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     modalEl.classList.add("hidden");
     modalBody.innerHTML = "";
   }
-
   // ------- routing views (bottom nav)
   const views = {
     chats: $("view-chats"),
@@ -537,6 +536,31 @@ function progress(tasks){
   return doneCount / tasks.length;
 }
 
+const TASK_COLOR_KEYS = ["gray", "yellow", "red", "blue", "green"];
+
+function openColorPicker(task, onPick){
+  const current = String(task.color || "gray");
+  const html = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      ${TASK_COLOR_KEYS.map(k => `
+        <button class="btn outline" data-color="${k}"
+          style="width:44px;height:44px;border-radius:12px; padding:0; border:2px solid ${k===current ? "rgba(0,0,0,.65)" : "rgba(0,0,0,.12)"};">
+          ${k}
+        </button>
+      `).join("")}
+    </div>
+  `;
+  openModal("Color de tarea", html);
+
+  modalBody.querySelectorAll("button[data-color]").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      const picked = btn.dataset.color;
+      closeModal();
+      onPick(picked);
+    });
+  });
+}
+
 function isDoneTask(t){
   return String(t.status || "").toUpperCase() === "DONE";
 }
@@ -730,10 +754,14 @@ async function openTaskCommentsModal({ taskId, title, taskAttachments = [] }){
   const modal = document.createElement("div");
   modal.className = "imgmodal";
   modal.innerHTML = `
-    <div class="imgmodal-top" style="justify-content:space-between;">
-      <div style="font-weight:900">Comentarios</div>
-      <button class="iconbtn" id="cClose">✕</button>
-    </div>
+    <div class="imgmodal-top" style="justify-content:space-between; gap:12px;">
+  <div style="display:flex; gap:8px; background:rgba(0,0,0,.06); padding:6px; border-radius:999px;">
+    <button class="btn tiny" id="tabComments">Comentarios</button>
+    <button class="btn tiny" id="tabSubtasks">Subtareas</button>
+  </div>
+  <button class="iconbtn" id="cClose">✕</button>
+</div>
+
 
     <div class="imgmodal-body" style="background:#fff; padding:14px; border-radius:14px; max-width:760px; margin:0 auto;">
       <div style="font-weight:900; margin-bottom:10px;">${title || "Tarea"}</div>
@@ -744,6 +772,11 @@ async function openTaskCommentsModal({ taskId, title, taskAttachments = [] }){
           <div id="cTaskAtts"></div>
         </div>
       ` : ""}
+      <div id="cSubtasksPanel" class="card" style="display:none; margin-bottom:12px;">
+  <div style="font-weight:900;margin-bottom:10px;">Subtareas</div>
+  <div id="cSubtasksState" class="state"></div>
+  <div id="cSubtasksList"></div>
+</div>
 
       <div id="cState" class="state" style="margin:6px 0;"></div>
       <div id="cList" style="max-height:48vh; overflow:auto; padding-right:6px;"></div>
@@ -751,10 +784,11 @@ async function openTaskCommentsModal({ taskId, title, taskAttachments = [] }){
       <div id="cPending" style="margin-top:10px;"></div>
 
       <div class="row" style="gap:8px; margin-top:10px;">
-        <button class="btn outline" id="cAttach" type="button">📎</button>
-        <input id="cText" class="composer-input" placeholder="Escribe un comentario…" style="flex:1;" />
-        <button class="btn primary" id="cSend" type="button">Enviar</button>
-      </div>
+  <button class="btn outline" id="cAttach" type="button">📎</button>
+  <input id="cText" class="composer-input" placeholder="Escribe un comentario…" style="flex:1;" />
+  <button class="btn outline" id="cPlus" type="button">＋</button>
+  <button class="btn primary" id="cSend" type="button">Enviar</button>
+</div>
     </div>
   `;
 
@@ -766,12 +800,122 @@ async function openTaskCommentsModal({ taskId, title, taskAttachments = [] }){
   const cText = modal.querySelector("#cText");
   const cAttach = modal.querySelector("#cAttach");
   const cSend = modal.querySelector("#cSend");
+  const tabComments = modal.querySelector("#tabComments");
+const tabSubtasks = modal.querySelector("#tabSubtasks");
+const cSubtasksPanel = modal.querySelector("#cSubtasksPanel");
+const cSubtasksState = modal.querySelector("#cSubtasksState");
+const cSubtasksList = modal.querySelector("#cSubtasksList");
+const cPlus = modal.querySelector("#cPlus");
+
+let tab = "comments"; // "comments" | "subtasks"
+let subtasks = [];
+let subtasksLoading = false;
+let sending = false;
+let pending = [];
+let poll = null;
+
+function setTab(name){
+  tab = name;
+  const isSub = tab === "subtasks";
+
+  // UI
+  if (cSubtasksPanel) cSubtasksPanel.style.display = isSub ? "" : "none";
+  if (tabComments) tabComments.style.background = !isSub ? "#fff" : "transparent";
+  if (tabSubtasks) tabSubtasks.style.background = isSub ? "#fff" : "transparent";
+
+  // placeholder
+  if (cText) cText.placeholder = isSub ? "Nueva subtarea…" : (pending.length ? "Añade un texto (opcional)…" : "Escribe un comentario…");
+
+  if (isSub && !subtasksLoading) loadSubtasks();
+}
+
+function renderSubtasks(){
+  if (!cSubtasksList) return;
+  cSubtasksList.innerHTML = "";
+
+  if (!subtasks.length){
+    cSubtasksList.innerHTML = `<div class="state">Aún no hay subtareas.</div>`;
+    return;
+  }
+
+  for (const s of subtasks){
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.gap = "10px";
+    row.style.alignItems = "center";
+    row.style.padding = "8px 0";
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !!s.done;
+
+    const txt = document.createElement("div");
+    txt.style.flex = "1";
+    txt.style.fontWeight = "700";
+    txt.style.textDecoration = s.done ? "line-through" : "none";
+    txt.textContent = s.text || "Subtarea";
+
+    cb.addEventListener("change", async ()=>{
+      // optimistic
+      const prev = s.done;
+      s.done = cb.checked;
+      txt.style.textDecoration = s.done ? "line-through" : "none";
+
+      try{
+        await API.toggleSubtask(taskId, s.id);
+        await loadSubtasks();
+      }catch(e){
+        s.done = prev;
+        cb.checked = prev;
+        txt.style.textDecoration = prev ? "line-through" : "none";
+        alert("Error en subtarea: " + (e.message || String(e)));
+      }
+    });
+
+    row.appendChild(cb);
+    row.appendChild(txt);
+    cSubtasksList.appendChild(row);
+  }
+}
+
+async function loadSubtasks(){
+  if (!cSubtasksState) return;
+  subtasksLoading = true;
+  cSubtasksState.textContent = "Cargando subtareas…";
+  try{
+    const raw = await API.getSubtasks(taskId);
+    subtasks = Array.isArray(raw?.subtasks) ? raw.subtasks : (Array.isArray(raw) ? raw : []);
+    cSubtasksState.textContent = "";
+    renderSubtasks();
+  }catch(e){
+    cSubtasksState.textContent = e.message || String(e);
+  }finally{
+    subtasksLoading = false;
+  }
+}
+cPlus?.addEventListener("click", async ()=>{
+  if (tab !== "subtasks") { setTab("subtasks"); return; }
+  const text = (cText.value || "").trim();
+  if (!text) return;
+
+  try{
+    cPlus.disabled = true;
+    await API.createSubtask(taskId, text);
+    cText.value = "";
+    setTab("subtasks");
+    await loadSubtasks();
+  }catch(e){
+    alert("Error creando subtarea: " + (e.message || String(e)));
+  }finally{
+    cPlus.disabled = false;
+  }
+});
+
+tabComments?.addEventListener("click", ()=> setTab("comments"));
+tabSubtasks?.addEventListener("click", ()=> setTab("subtasks"));
+setTab("comments");
   const cPending = modal.querySelector("#cPending");
   const cTaskAtts = modal.querySelector("#cTaskAtts");
-
-  let sending = false;
-  let pending = [];
-  let poll = null;
 
   const close = () => {
     try { clearInterval(poll); } catch(_){}
@@ -932,6 +1076,7 @@ async function openTaskCommentsModal({ taskId, title, taskAttachments = [] }){
 function renderTaskTile(t, {showHistory=false}){
   const done = String(t.status||"").toUpperCase()==="DONE";
   const canArchive = !showHistory && done;
+  const canDelete = showHistory; // ✅ solo historial
 
   const tile = document.createElement("div");
   tile.className = "tasktile";
@@ -968,6 +1113,24 @@ function renderTaskTile(t, {showHistory=false}){
 
   top.appendChild(pill);
 
+  // 🎨 color (siempre)
+const pal = document.createElement("button");
+pal.className = "btn tiny";
+pal.innerHTML = "🎨";
+pal.addEventListener("click", async (e) => {
+  e.stopPropagation();
+  openColorPicker(t, async (picked) => {
+    if (!picked || picked === t.color) return;
+    try {
+      await API.updateTask(t.id || t._id, { color: picked });
+      await loadDashboard();
+    } catch (err) {
+      alert("Error cambiando color: " + (err.message || String(err)));
+    }
+  });
+});
+top.appendChild(pal);
+
   if(canArchive){
     const arch = document.createElement("button");
     arch.className = "btn tiny";
@@ -983,6 +1146,26 @@ function renderTaskTile(t, {showHistory=false}){
     });
     top.appendChild(arch);
   }
+
+  if (canDelete) {
+  const del = document.createElement("button");
+  del.className = "btn tiny";
+  del.style.border = "1px solid rgba(185,28,28,.35)";
+  del.style.color = "#b91c1c";
+  del.innerHTML = `🗑️ Borrar`;
+  del.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const ok = confirm(`¿Borrar definitivamente "${t.title || "tarea"}"?`);
+    if (!ok) return;
+    try {
+      await API.deleteTask(t.id || t._id); // ✅ usa la nueva función
+      await loadDashboard();
+    } catch (err) {
+      alert("Error borrando tarea: " + (err.message || String(err)));
+    }
+  });
+  top.appendChild(del);
+}
 
   body.appendChild(top);
 
@@ -1048,28 +1231,6 @@ if(atts.length){
 
   // ✅ Abrir comentarios al clicar en la tarea (pero no en checkbox/archivar/adjuntos)
 tile.style.cursor = "pointer";
-tile.addEventListener("click", (e) => {
-  // si clicas en elementos interactivos, no abrir modal
-  if (e.target.closest("input.taskcheck")) return;
-  if (e.target.closest("button")) return;      // archivar
-  if (e.target.closest(".attimg")) return;      // imagen
-  if (e.target.closest(".attfile")) return;     // file chip
-
-  const taskId = String(t.id || t._id || "");
-  openTaskCommentsModal({
-    taskId,
-    title: t.title || t.text || "Tarea",
-    taskAttachments: taskAttachments(t).map(a => ({
-      url: absUrl(a.url),
-      name: a.name || "Archivo",
-      mime: a.mime || "",
-      size: a.size || 0,
-      isImage: isImageMime(a.mime) || guessIsImageByName(a.name) || guessIsImageByName(a.url),
-    })),
-  });
-});
-
-tile.style.cursor = "pointer";
 
 tile.addEventListener("click", (e) => {
   // no abrir si clicas checkbox, botones o adjuntos
@@ -1091,7 +1252,7 @@ tile.addEventListener("click", (e) => {
   return tile;
 }
 
-function renderSection({mountId, title, subtitle, progressValue, showProgress, tasks, emptyText, showHistory}){
+function renderSection({mountId, title, subtitle, progressValue, showProgress, tasks, emptyText, showHistory, sectionKey}){
   const mount = document.getElementById(mountId);
   if(!mount) return;
 
@@ -1148,12 +1309,77 @@ function renderSection({mountId, title, subtitle, progressValue, showProgress, t
     em.textContent = emptyText;
     body.appendChild(em);
   }else{
-    for(const t of tasks){
-      body.appendChild(renderTaskTile(t, {showHistory}));
-    }
+    for (const t of tasks) {
+  const tile = renderTaskTile(t, { showHistory });
+
+  // ✅ Drag only en TAREAS (no historial)
+  if (!showHistory) {
+    tile.draggable = true;
+    tile.dataset.taskId = String(t.id || t._id || "");
+    tile.dataset.sectionKey = sectionKey;
+    tile.classList.add("draggable");
+  }
+
+  body.appendChild(tile);
+}
   }
 
   mount.appendChild(body);
+  // ✅ instala drag sobre el body de esta sección
+if (!showHistory) {
+  installDragForSection(body, sectionKey);
+}
+}
+
+let dragSrc = null;
+
+function installDragForSection(containerEl, sectionKey) {
+  if (!containerEl) return;
+
+  containerEl.addEventListener("dragstart", (e) => {
+    const tile = e.target.closest(".tasktile.draggable");
+    if (!tile) return;
+    dragSrc = tile;
+    e.dataTransfer.effectAllowed = "move";
+    tile.classList.add("dragging");
+  });
+
+  containerEl.addEventListener("dragend", (e) => {
+    const tile = e.target.closest(".tasktile.draggable");
+    if (tile) tile.classList.remove("dragging");
+    dragSrc = null;
+  });
+
+  containerEl.addEventListener("dragover", (e) => {
+    if (!dragSrc) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+
+    const over = e.target.closest(".tasktile.draggable");
+    if (!over || over === dragSrc) return;
+
+    const rect = over.getBoundingClientRect();
+    const after = (e.clientY - rect.top) > rect.height / 2;
+    over.parentNode.insertBefore(dragSrc, after ? over.nextSibling : over);
+  });
+
+  containerEl.addEventListener("drop", async (e) => {
+    if (!dragSrc) return;
+    e.preventDefault();
+
+    // guarda orden en backend
+    try {
+      const ids = Array.from(containerEl.querySelectorAll(".tasktile.draggable"))
+        .map((el) => el.dataset.taskId)
+        .filter(Boolean);
+
+      await API.saveTaskOrder(sectionKey, ids);
+    } catch (err) {
+      console.warn("No se pudo guardar orden:", err);
+      // si falla, recarga desde server para “reparar”
+      await loadDashboard();
+    }
+  });
 }
 
 async function loadDashboard(){
@@ -1187,6 +1413,7 @@ async function loadDashboard(){
 
     renderSection({
       mountId: "secMine",
+      sectionKey: "pending",
       title: "Pendientes",
       subtitle: showHistory ? "Completadas (archivadas o pasadas 24h)" : "Pendientes + completadas últimas 24h",
       progressValue: pMine,
@@ -1198,6 +1425,7 @@ async function loadDashboard(){
 
     renderSection({
       mountId: "secAssigned",
+      sectionKey: "requested",
       title: "Solicitadas",
       subtitle: showHistory ? "Completadas (archivadas o pasadas 24h)" : "Pendientes + completadas últimas 24h",
       progressValue: pAssigned,
@@ -1257,21 +1485,28 @@ const photo = fullUrl(ME.photoUrlFull || ME.photoUrl || ""); // ✅ igual que Fl
       <div style="height:12px"></div>
 
       <div class="field">
-        <label>Nombre</label>
-        <input class="input" id="pName" value="${escapeAttr(name)}" />
-      </div>
-        <div class="field">
-     <label>Estado</label>
-      <select class="input" id="pStatus">
-     <option value="DISPONIBLE">Disponible</option>
-     <option value="OCUPADO">Ocupado</option>
-     </select>
-     </div>
-      </div>
+  <label>Nombre</label>
+  <input class="input" id="pName" value="${escapeAttr(name)}" />
+</div>
 
-      <div class="row right">
-        <button class="btn primary" id="pSave">Guardar</button>
-      </div>
+<div class="field">
+  <label>Estado</label>
+  <select class="input" id="pStatus">
+    <option value="DISPONIBLE">Disponible</option>
+    <option value="OCUPADO">Ocupado</option>
+  </select>
+</div>
+
+<div class="field">
+  <label>Foto (opcional)</label>
+  <input id="pAvatar" type="file" accept="image/*" />
+</div>
+
+<div class="row right">
+  <button class="btn primary" id="pSave">Guardar</button>
+</div>
+
+
 
       <div id="pState" class="state"></div>
     `;
@@ -1294,7 +1529,8 @@ const photo = fullUrl(ME.photoUrlFull || ME.photoUrl || ""); // ✅ igual que Fl
         const MY_ID = String(ME.id || ME._id);
 
         // 2) avatar (si hay)
-        const file = document.getElementById("pAvatar").files?.[0];
+        const avatarEl = document.getElementById("pAvatar");
+const file = avatarEl?.files?.[0];
 if(file){
   await API.uploadMePhoto(file); // ✅ POST /me/photo con field "photo"
 }
