@@ -548,6 +548,65 @@ router.patch("/:taskId/assignees", auth, async (req, res, next) => {
   }
 });
 
+// ✅ GET /tasks/:taskId  -> devuelve la tarea (para abrir modal/pantalla)
+router.get("/:taskId", auth, async (req, res, next) => {
+  try {
+    const userId = String(req.user.id);
+    const taskId = String(req.params.taskId);
+
+    const task = await Task.findById(taskId)
+      .populate("creator", "name email photoUrl status")
+      .populate("assignee", "name email photoUrl status")
+      .populate("assignees", "name email photoUrl status")
+      .populate("chat", "type title");
+
+    if (!task) return res.status(404).json({ error: "Task not found" });
+
+    // miembro del chat
+    const mem = await assertMember(task, userId);
+    if (!mem.ok) return res.status(mem.code).json({ error: mem.error });
+
+    return res.json({
+      task: {
+        id: String(task._id),
+        _id: String(task._id),
+        title: task.title,
+        status: task.status,
+        color: task.color,
+        dueDate: task.dueDate || null,
+        createdAt: task.createdAt,
+        completedAt: task.completedAt || null,
+        archivedAt: task.archivedAt || null,
+        attachments: (task.attachments || []).map((a) => ({
+          url: a.url,
+          name: a.name,
+          mime: a.mime,
+          size: a.size,
+        })),
+        chat: task.chat
+          ? { id: String(task.chat._id), _id: String(task.chat._id), type: task.chat.type, title: task.chat.title }
+          : null,
+        creator: task.creator
+          ? { id: String(task.creator._id), _id: String(task.creator._id), name: task.creator.name }
+          : null,
+        assignee: task.assignee
+          ? { id: String(task.assignee._id), _id: String(task.assignee._id), name: task.assignee.name }
+          : null,
+        assignees: (task.assignees || []).map((u) => ({
+          id: String(u._id),
+          _id: String(u._id),
+          name: u.name,
+          email: u.email,
+          photoUrl: u.photoUrl || null,
+          status: u.status || "",
+        })),
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
 // ✅ PATCH /tasks/:taskId  (editar dueDate / color)
 router.patch("/:taskId", auth, async (req, res, next) => {
   try {
