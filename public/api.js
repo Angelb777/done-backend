@@ -242,6 +242,14 @@ async function updateTask(taskId, patch) {
   });
 }
 
+async function updateTaskAssignees(taskId, body) {
+  // body: { add?:[id], remove?:[id], set?:[id] }
+  return api(`/tasks/${encodeURIComponent(taskId)}/assignees`, {
+    method: "PATCH",
+    body: JSON.stringify(body || {}),
+  });
+}
+
 async function deleteTask(taskId) {
   return api(`/tasks/${encodeURIComponent(taskId)}`, {
     method: "DELETE",
@@ -316,5 +324,6 @@ window.DONE_API = {
   getSubtasks,
   createSubtask,
   toggleSubtask,
+  updateTaskAssignees,
   deleteSubtask,
 };

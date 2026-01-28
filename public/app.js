@@ -575,7 +575,157 @@ function progress(tasks){
   return total ? done / total : 0;
 }
 
-const TASK_COLOR_KEYS = ["gray", "yellow", "red", "blue", "green"];
+async function openAssigneesModal(taskId){
+  // cargamos la task “full” para tener assignees populated
+  let taskFull;
+  try{
+    const raw = await API.getTask(taskId);
+    taskFull = raw?.task || raw;
+  }catch(e){
+    alert(e.message || String(e));
+    return;
+  }
+
+  const title = taskFull?.title || "Tarea";
+  const assignees = Array.isArray(taskFull?.assignees) ? taskFull.assignees : [];
+
+  openModal("Responsables", `
+    <div class="state" style="margin-bottom:8px;"><b>${escapeHtml(title)}</b></div>
+
+    <div class="card" style="margin-bottom:12px;">
+      <div style="font-weight:1000;margin-bottom:8px;">Actuales</div>
+      <div id="assList"></div>
+    </div>
+
+    <div class="field">
+      <label>Buscar usuario (solo miembros del chat)</label>
+      <input class="input" id="assQuery" placeholder="Nombre o email (mín. 2 letras)" />
+    </div>
+    <div id="assState" class="state"></div>
+    <div id="assResults" class="list"></div>
+  `);
+
+  const assList = document.getElementById("assList");
+  const assQuery = document.getElementById("assQuery");
+  const assState = document.getElementById("assState");
+  const assResults = document.getElementById("assResults");
+
+  function paintAssignees(){
+    if(!assList) return;
+    if(!assignees.length){
+      assList.innerHTML = `<div class="state">No hay responsables.</div>`;
+      return;
+    }
+    assList.innerHTML = "";
+    for(const u of assignees){
+      const row = document.createElement("div");
+      row.className = "chatrow";
+      row.style.cursor = "default";
+
+      const name = u.name || u.email || "Usuario";
+      const left = document.createElement("div");
+      left.className = "chatleft";
+
+      const av = document.createElement("div");
+      av.className = "avatar";
+      av.textContent = (name?.[0]||"U").toUpperCase();
+
+      const meta = document.createElement("div");
+      meta.className = "chatmeta";
+      meta.innerHTML = `<div class="title">${escapeHtml(name)}</div><div class="sub">${escapeHtml(u.email||"")}</div>`;
+
+      left.appendChild(av);
+      left.appendChild(meta);
+
+      const rm = document.createElement("button");
+      rm.className = "btn tiny";
+      rm.style.border = "1px solid rgba(185,28,28,.35)";
+      rm.style.color = "#b91c1c";
+      rm.textContent = "Quitar";
+      rm.addEventListener("click", async ()=>{
+        try{
+          rm.disabled = true;
+          assState.textContent = "Actualizando…";
+          await API.updateTaskAssignees(taskId, { remove: [String(u.id || u._id)] });
+
+          // refresca task
+          const raw = await API.getTask(taskId);
+          const tf = raw?.task || raw;
+          assignees.splice(0, assignees.length, ...(Array.isArray(tf?.assignees)?tf.assignees:[]));
+
+          assState.textContent = "";
+          paintAssignees();
+          await loadDashboard();
+        }catch(e){
+          assState.textContent = e.message || String(e);
+        }finally{
+          rm.disabled = false;
+        }
+      });
+
+      row.appendChild(left);
+      row.appendChild(rm);
+      assList.appendChild(row);
+    }
+  }
+
+  paintAssignees();
+
+  // Buscador (usa /users/search como ya usas para chats)
+  let debounce = null;
+  assQuery?.addEventListener("input", ()=>{
+    clearTimeout(debounce);
+    debounce = setTimeout(doSearch, 250);
+  });
+
+  async function doSearch(){
+    const q = (assQuery?.value || "").trim();
+    if(q.length < 2){
+      assState.textContent = "Escribe al menos 2 caracteres.";
+      assResults.innerHTML = "";
+      return;
+    }
+
+    assState.textContent = "Buscando…";
+    assResults.innerHTML = "";
+
+    try{
+      const raw = await API.searchUsers(q);
+      let users = Array.isArray(raw) ? raw : (raw.users || []);
+      const current = new Set(assignees.map(x => String(x.id || x._id)));
+      users = users.filter(u => !current.has(String(u.id || u._id)));
+
+      assState.textContent = users.length ? "" : "Sin resultados.";
+
+      for(const u of users){
+        const row = renderUserRow(u, async ()=>{
+          try{
+            assState.textContent = "Añadiendo…";
+            await API.updateTaskAssignees(taskId, { add: [String(u.id || u._id)] });
+
+            const raw2 = await API.getTask(taskId);
+            const tf2 = raw2?.task || raw2;
+            assignees.splice(0, assignees.length, ...(Array.isArray(tf2?.assignees)?tf2.assignees:[]));
+
+            assState.textContent = "";
+            paintAssignees();
+            assResults.innerHTML = "";
+            assQuery.value = "";
+            await loadDashboard();
+          }catch(e){
+            assState.textContent = e.message || String(e);
+          }
+        }, "Añadir");
+
+        assResults.appendChild(row);
+      }
+    }catch(e){
+      assState.textContent = e.message || String(e);
+    }
+  }
+}
+
+const TASK_COLOR_KEYS = ["gray", "yellow", "red", "blue", "green", "purple", "orange", "pink", "teal"];
 
 function openColorPicker(task, onPick){
   const current = String(task.color || "gray");
@@ -822,10 +972,11 @@ async function openTaskCommentsModal({ taskId, title, taskAttachments = [] }){
         <!-- ZONA SCROLL -->
         <div class="imgmodal-scroll">
           <div id="cSubtasksPanel" class="card" style="display:none; margin-bottom:12px;">
-            <div style="font-weight:900;margin-bottom:10px;">Subtareas</div>
-            <div id="cSubtasksState" class="state"></div>
-            <div id="cSubtasksList"></div>
-          </div>
+  <div style="font-weight:900;margin-bottom:10px;">Subtareas</div>
+  <div id="cSubtasksProg"></div>  <!-- ✅ NUEVO -->
+  <div id="cSubtasksState" class="state"></div>
+  <div id="cSubtasksList"></div>
+</div>
 
           <div id="cState" class="state" style="margin:6px 0;"></div>
           <div id="cList"></div>
@@ -863,6 +1014,7 @@ const cSubtasksPanel = modal.querySelector("#cSubtasksPanel");
 const cSubtasksState = modal.querySelector("#cSubtasksState");
 const cSubtasksList = modal.querySelector("#cSubtasksList");
 const cPlus = modal.querySelector("#cPlus");
+const cSubtasksProg = modal.querySelector("#cSubtasksProg"); // ✅ NUEVO
 
 let tab = "comments"; // "comments" | "subtasks"
 let subtasks = [];
@@ -889,6 +1041,22 @@ function setTab(name){
 
 function renderSubtasks(){
   if (!cSubtasksList) return;
+    // ✅ progreso
+  if (cSubtasksProg) {
+    const total = subtasks.length;
+    const doneN = subtasks.filter(x => !!x.done).length;
+    const percent = total ? Math.round((doneN / total) * 100) : 0;
+
+    cSubtasksProg.innerHTML = total ? `
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:900;opacity:.7;margin-bottom:6px;">
+        <div>Progreso</div>
+        <div>${doneN}/${total} (${percent}%)</div>
+      </div>
+      <div style="height:10px;background:rgba(0,0,0,.08);border-radius:999px;overflow:hidden;">
+        <div style="height:100%;width:${percent}%;background:rgba(22,129,54,.85);"></div>
+      </div>
+    ` : "";
+  }
   cSubtasksList.innerHTML = "";
 
   if (!subtasks.length){
@@ -918,6 +1086,7 @@ function renderSubtasks(){
       const prev = s.done;
       s.done = cb.checked;
       txt.style.textDecoration = s.done ? "line-through" : "none";
+      renderSubtasks();
 
       try{
         await API.toggleSubtask(taskId, s.id);
@@ -926,6 +1095,7 @@ function renderSubtasks(){
         s.done = prev;
         cb.checked = prev;
         txt.style.textDecoration = prev ? "line-through" : "none";
+        renderSubtasks();
         alert("Error en subtarea: " + (e.message || String(e)));
       }
     });
@@ -1171,6 +1341,17 @@ function renderTaskTile(t, {showHistory=false}){
   const top = document.createElement("div");
   top.className = "tasktop";
 
+    // 👥 responsables (assignees)
+  const btnAss = document.createElement("button");
+  btnAss.className = "btn tiny";
+  btnAss.innerHTML = "👥";
+  btnAss.title = "Responsables";
+  btnAss.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    await openAssigneesModal(String(t.id || t._id));
+  });
+  top.appendChild(btnAss);
+
   const pill = document.createElement("div");
   pill.className = `pillstatus ${done ? "done" : "pending"}`;
   pill.textContent = done ? "Hecha" : "Pendiente";
@@ -1233,6 +1414,72 @@ top.appendChild(pal);
 
   body.appendChild(top);
 
+    // 📅 editar dueDate
+  const btnDue = document.createElement("button");
+  btnDue.className = "btn tiny";
+  btnDue.innerHTML = "📅";
+  btnDue.title = "Editar fecha";
+  btnDue.addEventListener("click", async (e) => {
+    e.stopPropagation();
+
+    const cur = t.dueDate ? new Date(t.dueDate) : null;
+
+    // input type datetime-local necesita formato "YYYY-MM-DDTHH:mm"
+    function toLocalInputValue(d){
+      if(!d) return "";
+      const pad = (n)=> String(n).padStart(2,"0");
+      const yyyy = d.getFullYear();
+      const mm = pad(d.getMonth()+1);
+      const dd = pad(d.getDate());
+      const hh = pad(d.getHours());
+      const mi = pad(d.getMinutes());
+      return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+    }
+
+    openModal("Fecha de la tarea", `
+      <div class="field">
+        <label>Vence el…</label>
+        <input class="input" id="dueInput" type="datetime-local" value="${toLocalInputValue(cur)}" />
+        <div class="state" style="margin-top:6px;">Déjalo vacío para “Sin fecha”.</div>
+      </div>
+      <div class="row right" style="gap:10px;">
+        <button class="btn outline" id="dueClear">Quitar fecha</button>
+        <button class="btn primary" id="dueSave">Guardar</button>
+      </div>
+      <div id="dueState" class="state"></div>
+    `);
+
+    const dueInput = document.getElementById("dueInput");
+    const dueState = document.getElementById("dueState");
+
+    document.getElementById("dueClear")?.addEventListener("click", async ()=>{
+      try{
+        dueState.textContent = "Guardando…";
+        await API.updateTask(t.id || t._id, { dueDate: null });
+        closeModal();
+        await loadDashboard();
+      }catch(err){
+        dueState.textContent = err.message || String(err);
+      }
+    });
+
+    document.getElementById("dueSave")?.addEventListener("click", async ()=>{
+      try{
+        const v = (dueInput?.value || "").trim();
+        const iso = v ? new Date(v).toISOString() : null;
+
+        dueState.textContent = "Guardando…";
+        await API.updateTask(t.id || t._id, { dueDate: iso });
+        closeModal();
+        await loadDashboard();
+      }catch(err){
+        dueState.textContent = err.message || String(err);
+      }
+    });
+  });
+
+  top.appendChild(btnDue);
+
   // title
   const title = document.createElement("div");
   title.className = `tasktitle ${done ? "lined" : ""}`;
@@ -1244,6 +1491,27 @@ top.appendChild(pal);
   sub.className = "tasksub";
   sub.textContent = `${dueText(t)} • Responsable: ${assigneeName(t)}`;
   body.appendChild(sub);
+
+    // ✅ progreso subtareas (si viene del dashboard)
+  if (t.subtasks && typeof t.subtasks.total === "number" && t.subtasks.total > 0) {
+    const total = Number(t.subtasks.total || 0);
+    const doneN = Number(t.subtasks.done || 0);
+    const percent = total ? Math.round((doneN / total) * 100) : 0;
+
+    const wrap = document.createElement("div");
+    wrap.style.marginTop = "8px";
+
+    wrap.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:900;opacity:.7;">
+        <div>Subtareas</div>
+        <div>${doneN}/${total} (${percent}%)</div>
+      </div>
+      <div style="height:10px;background:rgba(0,0,0,.08);border-radius:999px;overflow:hidden;margin-top:6px;">
+        <div style="height:100%;width:${percent}%;background:rgba(22,129,54,.85);"></div>
+      </div>
+    `;
+    body.appendChild(wrap);
+  }
 
   // completedAt
   if(done && t.completedAt){
