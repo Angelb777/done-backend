@@ -1619,3 +1619,44 @@ body{
   border-radius: 999px;
   background: #b91c1c;
 }
+
+/* Bottom nav solo iconos */
+.bottomnav{
+  display:flex;
+  align-items:center;
+  justify-content:space-around;
+  gap: 18px;
+  padding: 10px 14px;
+}
+
+.navitem{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  width: 56px;
+  height: 44px;
+
+  border: 0;
+  background: transparent;
+  border-radius: 14px;
+  cursor: pointer;
+}
+
+/* Icono */
+.navimg{
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  display:block;
+}
+
+/* Estado activo (ajústalo si quieres más/menos “pill”) */
+.navitem.active{
+  background: rgba(22,129,54,0.10);
+}
+
+/* Opcional: un pelín de feedback */
+.navitem:hover{
+  background: rgba(0,0,0,0.04);
+}
