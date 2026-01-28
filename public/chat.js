@@ -110,7 +110,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   async function uploadGroupPhoto(file) {
-  const token = API.getToken();
+  const token = getTokenSafe();
   const form = new FormData();
   form.append("photo", file); // 👈 campo EXACTO que espera el backend
 
@@ -205,6 +205,13 @@ async function toggleTask(taskId){
     return v.startsWith("image/");
   }
 
+  function getTokenSafe(){
+  try{
+    if (API.getToken) return API.getToken();
+  }catch(_){}
+  return localStorage.getItem("done_token");
+}
+
   function guessIsImageByName(name) {
     const n = String(name || "").toLowerCase();
     return n.endsWith(".png") || n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".webp") || n.endsWith(".gif");
@@ -258,12 +265,11 @@ function openableUrl(url){
 
   function openImage(url) {
   const local = toLocalPath(url);
-  const openUrl = openableUrl(url); // absoluta
+  const openUrl = openableUrl(url); // ✅ absoluta para abrir en pestaña
   imgCurrentUrl = openUrl;
-  imgTagSet(local); // el <img> del modal usa local
+  imgTagSet(local);                 // ✅ el <img> usa path local
   imgModal.classList.remove("hidden");
 }
-
 
   function imgTagSet(url) {
     imgModalEl.src = url;
@@ -731,7 +737,7 @@ if (isGroupChat) {
       img.src = toLocalPath(url);
       img.alt = name;
       cell.appendChild(img);
-      cell.addEventListener("click", ()=> openImage(openUrl));
+      cell.addEventListener("click", ()=> openImage(url));
       return cell;
     }
 
@@ -1221,81 +1227,99 @@ function taskAttachmentsOfMessage(m){
   const atts = normalizeAttachments(m);
 
   if (isTask) {
+  const taskId = taskIdOfMessage(m);
+
+  // Si por lo que sea no tenemos id, pintamos texto simple
+  if (!taskId) {
+    const p = document.createElement("div");
+    p.className = "msgtext";
+    p.textContent = m.text || "Tarea";
+    content.appendChild(p);
+  } else {
     const done = String(m.taskStatus || "").toUpperCase() === "DONE";
 
-    const row = document.createElement("div");
-    row.className = "taskrow";
-    row.innerHTML = `
-      <input type="checkbox" class="taskcheck" ${done ? "checked" : ""} />
-      <div class="tasktext ${done ? "done" : ""}">${esc(m.text || "")}</div>
-    `;
-
-    // evitar que click en el check dispare click de la fila
-    row.querySelector(".taskcheck").addEventListener("click", (e) => {
-      e.stopPropagation();
-    });
-
-    row.querySelector(".taskcheck").addEventListener("change", async (e) => {
-      const taskId = m.taskId || m.task?._id || m.task?.id || m._id; // fallback
-      if (!taskId) return;
-
-      const cb = e.target;
-
-      try {
-        cb.disabled = true;
-        await toggleTask(taskId);
-        await load({ silent: true }); // refresca estado desde backend
-      } catch (err) {
-        cb.checked = !cb.checked;
-        alert("Error actualizando tarea: " + (err.message || String(err)));
-      } finally {
-        cb.disabled = false;
-      }
-    });
-
-    content.appendChild(row);
-
-    // ✅ Adjuntos reales de la TAREA (no solo del mensaje)
-    // - prioriza m.task.attachments
-    // - luego m.taskAttachments
-    // - luego m.attachments (fallback)
+    // Adjuntos reales de la tarea
     const taskAtts = normalizeTaskAttachments(m);
 
-    if (taskAtts.length) {
-      content.appendChild(renderAttachmentsGallery(taskAtts));
-    }
+    // Objeto "tipo Task" para renderizar el mismo tile del dashboard
+    const t = {
+      id: taskId,
+      _id: taskId,
+      title: m.text || "Tarea",
+      text: m.text || "Tarea",
+      status: done ? "DONE" : "PENDING",
+      dueDate: m.dueDate || null,
+      color: m.color || "gray",
 
-    // ✅ abrir comentarios al clicar en la tarea (igual que Flutter)
-    row.style.cursor = "pointer";
-    row.addEventListener("click", (e) => {
-      if (e.target && e.target.classList && e.target.classList.contains("taskcheck")) return;
+      // si el mensaje los trae
+      assigneeName: m.assigneeName || "",
+      assignee: m.assignee || null,
+      subtasks: m.subtasks || null,
 
-      const taskId = taskIdOfMessage(m);
-      openTaskCommentsModal({
-        taskId,
-        title: m.text || "Tarea",
-        // ✅ aquí también pasamos los adjuntos de la TAREA
-        taskAttachments: taskAtts,
-      });
-    });
+      // para que pinte adjuntos igual
+      attachments: taskAtts,
+    };
 
-  } else {
-    // NORMAL
-    if (atts.length) {
-      content.appendChild(renderAttachmentsGallery(atts));
-      if (String(m.text || "").trim()) {
-        const p = document.createElement("div");
-        p.className = "msgtext";
-        p.textContent = m.text;
-        content.appendChild(p);
-      }
+    // ✅ UI del dashboard
+    if (!window.DONE_TASK_UI || typeof window.DONE_TASK_UI.renderTaskTile !== "function") {
+      // fallback visual si aún no cargaste task_ui.js
+      const fallback = document.createElement("div");
+      fallback.className = "taskrow";
+      fallback.innerHTML = `
+        <input type="checkbox" class="taskcheck" ${done ? "checked" : ""} disabled />
+        <div class="tasktext ${done ? "done" : ""}">${esc(m.text || "Tarea")}</div>
+      `;
+      content.appendChild(fallback);
+
+      if (taskAtts.length) content.appendChild(renderAttachmentsGallery(taskAtts));
     } else {
-      const p = document.createElement("div");
-      p.className = "msgtext";
-      p.textContent = m.text || "";
-      content.appendChild(p);
+      const tile = window.DONE_TASK_UI.renderTaskTile(t, {
+      showHistory: false,
+      onRefresh: async () => load({ silent: true }), // 👈 en chat refresca mensajes
+      });
+
+      // Para que no parezca “tarjeta dentro de tarjeta”
+      tile.style.margin = "0";
+      content.appendChild(tile);
+
+      // Click abre comentarios (si el tile ya lo hace, no pasa nada)
+      tile.addEventListener("click", (e) => {
+        if (e.target?.closest("button") || e.target?.closest("input") || e.target?.closest("a")) return;
+
+        if (typeof window.DONE_TASK_UI.openTaskCommentsModal === "function") {
+          window.DONE_TASK_UI.openTaskCommentsModal({
+            taskId,
+            title: t.title,
+            taskAttachments: taskAtts,
+          });
+        } else {
+          // fallback a tu modal actual si lo tienes en este scope
+          openTaskCommentsModal({
+            taskId,
+            title: t.title,
+            taskAttachments: taskAtts,
+          });
+        }
+      });
     }
   }
+} else {
+  // NORMAL
+  if (atts.length) {
+    content.appendChild(renderAttachmentsGallery(atts));
+    if (String(m.text || "").trim()) {
+      const p = document.createElement("div");
+      p.className = "msgtext";
+      p.textContent = m.text;
+      content.appendChild(p);
+    }
+  } else {
+    const p = document.createElement("div");
+    p.className = "msgtext";
+    p.textContent = m.text || "";
+    content.appendChild(p);
+  }
+}
 
   const time = document.createElement("div");
   time.className = "bub-time";

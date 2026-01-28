@@ -1048,9 +1048,9 @@ body{
 .tasktop{
   display:flex;
   align-items:center;
-  justify-content:space-between;
+  justify-content:flex-start; /* 👈 CAMBIO CLAVE */
   gap:10px;
-  margin-bottom: 8px;
+  margin-bottom:8px;
 }
 
 .pillstatus{

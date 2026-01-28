@@ -33,27 +33,27 @@
 <body>
 
   <!-- TOP BAR CHAT -->
-<div class="topbar topbar-chat">
-  <div class="topbar-left">
-    <button class="iconbtn" id="backBtn" title="Volver">←</button>
-  </div>
+  <div class="topbar topbar-chat">
+    <div class="topbar-left">
+      <button class="iconbtn" id="backBtn" title="Volver">←</button>
+    </div>
 
-  <div class="topbar-center">
-    <button
-      class="chat-title-btn"
-      id="chatTitleBtn"
-      type="button"
-      title="Ver archivos"
-    >
-      <span id="chatTitle">Chat</span>
-    </button>
-  </div>
+    <div class="topbar-center">
+      <button
+        class="chat-title-btn"
+        id="chatTitleBtn"
+        type="button"
+        title="Ver archivos"
+      >
+        <span id="chatTitle">Chat</span>
+      </button>
+    </div>
 
-  <div class="topbar-right">
-    <button class="iconbtn" id="buzzBtn" title="Zumbido">🔔</button>
-    <button class="btn outline" id="logout">Salir</button>
+    <div class="topbar-right">
+      <button class="iconbtn" id="buzzBtn" title="Zumbido">🔔</button>
+      <button class="btn outline" id="logout">Salir</button>
+    </div>
   </div>
-</div>
 
   <div class="shell chat-shell">
     <div id="chatState" class="state"></div>
@@ -94,6 +94,7 @@
   </div>
 
   <script src="/api.js" defer></script>
+  <script src="/task_ui.js" defer></script> <!-- ✅ NUEVO -->
   <script src="/chat.js" defer></script>
 </body>
 </html>
