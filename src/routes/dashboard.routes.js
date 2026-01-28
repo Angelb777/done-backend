@@ -80,14 +80,26 @@ router.get("/", auth, async (req, res, next) => {
     const selectFields =
       "_id title color status dueDate chat creator assignee message createdAt completedAt archivedAt attachments";
 
-    const mineRaw = await Task.find(buildFilter({ assignee: userId }))
+     const mineRaw = await Task.find(
+       buildFilter({
+       $or: [{ assignee: userId }, { assignees: userId }],
+       })
+       )
+
       .populate("creator", "name email photoUrl")
       .populate("assignee", "name email photoUrl")
       .populate("chat", "type title")
       .select(selectFields)
       .lean();
 
-    const assignedRaw = await Task.find(buildFilter({ creator: userId, assignee: { $ne: userId } }))
+     const assignedRaw = await Task.find(
+       buildFilter({
+       creator: userId,
+       assignee: { $ne: userId },
+       assignees: { $ne: userId },
+       })
+       )
+
       .populate("creator", "name email photoUrl")
       .populate("assignee", "name email photoUrl")
       .populate("chat", "type title")

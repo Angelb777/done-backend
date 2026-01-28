@@ -10,7 +10,18 @@ const TASK_STATUS = {
   DONE: "DONE"
 };
 
-const TASK_COLORS = ["gray", "yellow", "red", "blue", "green"];
+const TASK_COLORS = [
+  "gray",
+  "yellow",
+  "orange",
+  "red",
+  "pink",
+  "purple",
+  "blue",
+  "teal",
+  "green",
+  "brown",
+];
 
 module.exports = {
   MESSAGE_TYPES,

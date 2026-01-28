@@ -33,6 +33,20 @@ function canEdit(task, userId) {
   return assignees.includes(me) || String(task.assignee) === me || String(task.creator) === me;
 }
 
+async function assertUsersAreChatMembers(chatId, userIds) {
+  const chat = await Chat.findById(chatId).select("_id members");
+  if (!chat) return { ok: false, code: 404, error: "Chat not found" };
+
+  const members = new Set((chat.members || []).map(String));
+  const bad = (userIds || []).map(String).filter((id) => !members.has(String(id)));
+
+  if (bad.length > 0) {
+    return { ok: false, code: 400, error: "Some users are not chat members", badUserIds: bad };
+  }
+
+  return { ok: true };
+}
+
 // ✅ Admin: por role en DB o por ADMIN_EMAILS del .env (como tu /me)
 async function isAdmin(req) {
   try {
@@ -529,6 +543,72 @@ router.patch("/:taskId", auth, async (req, res, next) => {
         assignee: task.assignee
           ? { _id: String(task.assignee._id), id: String(task.assignee._id), name: task.assignee.name }
           : null,
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ----------------------------------------------------
+// ✅ ASSIGNEES (responsables) - editar tras crear
+// PATCH /tasks/:taskId/assignees
+// body: { add?: [userId], remove?: [userId], set?: [userId] }
+// ----------------------------------------------------
+router.patch("/:taskId/assignees", auth, async (req, res, next) => {
+  try {
+    const userId = String(req.user.id);
+    const taskId = String(req.params.taskId);
+
+    const task = await Task.findById(taskId).select(
+      "_id chat creator assignee assignees"
+    );
+    if (!task) return res.status(404).json({ error: "Task not found" });
+
+    // miembro del chat
+    const mem = await assertMember(task, userId);
+    if (!mem.ok) return res.status(mem.code).json({ error: mem.error });
+
+    // permisos
+    if (!canEdit(task, userId)) return res.status(403).json({ error: "Forbidden" });
+
+    const add = Array.isArray(req.body.add) ? req.body.add.map(String) : [];
+    const remove = Array.isArray(req.body.remove) ? req.body.remove.map(String) : [];
+    const set = Array.isArray(req.body.set) ? req.body.set.map(String) : null;
+
+    // si viene "set", manda
+    let nextAssignees;
+    if (set) {
+      nextAssignees = set.map(String);
+    } else {
+      const cur = new Set((task.assignees || []).map(String));
+      for (const id of add) cur.add(String(id));
+      for (const id of remove) cur.delete(String(id));
+      nextAssignees = [...cur];
+    }
+
+    // ✅ Evita dejar tarea sin responsables (si quieres permitirlo, quita esto)
+    if (!nextAssignees || nextAssignees.length === 0) {
+      return res.status(400).json({ error: "Task must have at least 1 assignee" });
+    }
+
+    // ✅ Validar que los nuevos assignees son miembros del chat
+    const chk = await assertUsersAreChatMembers(task.chat, nextAssignees);
+    if (!chk.ok) return res.status(chk.code).json({ error: chk.error, badUserIds: chk.badUserIds });
+
+    task.assignees = nextAssignees;
+
+    // ✅ Mantén "assignee" principal sincronizado
+    task.assignee = nextAssignees[0];
+
+    await task.save();
+
+    return res.json({
+      ok: true,
+      task: {
+        id: String(task._id),
+        assignee: String(task.assignee),
+        assignees: (task.assignees || []).map(String),
       },
     });
   } catch (e) {
