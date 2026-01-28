@@ -1108,4 +1108,33 @@ router.post("/:chatId/read", auth, async (req, res, next) => {
   }
 });
 
+// GET /chats/:chatId/members
+router.get("/:chatId/members", auth, async (req, res, next) => {
+  try {
+    const userId = String(req.user.id);
+    const chatId = String(req.params.chatId);
+
+    const chat = await Chat.findById(chatId)
+      .select("_id members")
+      .populate("members", "name email photoUrl status");
+
+    if (!chat) return res.status(404).json({ error: "Chat not found" });
+
+    const isMember = (chat.members || []).map(m => String(m._id)).includes(userId);
+    if (!isMember) return res.status(403).json({ error: "Forbidden" });
+
+    return res.json({
+      members: (chat.members || []).map((u) => ({
+        id: String(u._id),
+        name: u.name || "",
+        email: u.email || "",
+        photoUrl: u.photoUrl || null,
+        status: u.status || "",
+      })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
 module.exports = router;

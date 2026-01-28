@@ -22,8 +22,8 @@ const router = express.Router();
  *  - (archivedAt != null) OR (completedAt < now-24h)
  *
  * Returns:
- *  - mine: tasks where assignee = me
- *  - assignedByMe: tasks where creator = me AND assignee != me
+ *  - mine: tasks where (assignee = me) OR (assignees contains me)
+ *  - assignedByMe: tasks where creator = me AND me NOT in assignee/assignees
  *
  * ✅ NUEVO:
  *  - subtasks: { total, done } (o null si no hay)
@@ -40,22 +40,28 @@ router.get("/", auth, async (req, res, next) => {
     const pendingOrder = (me?.taskOrder?.pending || []).map(String);
     const requestedOrder = (me?.taskOrder?.requested || []).map(String);
 
+    // Nota importante:
+    // - Para evitar conflictos entre $or de "tab" y $or de "mine",
+    //   envolvemos todo en $and.
     function buildFilter(base) {
-      if (tab === "HISTORIAL") {
-        return {
-          ...base,
-          status: TASK_STATUS.DONE,
-          $or: [{ archivedAt: { $ne: null } }, { completedAt: { $lt: since } }],
-        };
-      }
-      return {
-        ...base,
-        archivedAt: null,
-        $or: [
-          { status: TASK_STATUS.PENDING },
-          { status: TASK_STATUS.DONE, completedAt: { $gte: since } },
-        ],
-      };
+      const tabFilter =
+        tab === "HISTORIAL"
+          ? {
+              status: TASK_STATUS.DONE,
+              $or: [
+                { archivedAt: { $ne: null } },
+                { completedAt: { $lt: since } },
+              ],
+            }
+          : {
+              archivedAt: null,
+              $or: [
+                { status: TASK_STATUS.PENDING },
+                { status: TASK_STATUS.DONE, completedAt: { $gte: since } },
+              ],
+            };
+
+      return { $and: [base, tabFilter] };
     }
 
     function applyOrderStable(tasks, orderIds) {
@@ -72,34 +78,36 @@ router.get("/", auth, async (req, res, next) => {
         const bc = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         if (ac !== bc) return ac - bc;
 
-        // tie-breaker definitivo: evita “se mueve solo”
         return aId.localeCompare(bId);
       });
     }
 
     const selectFields =
-      "_id title color status dueDate chat creator assignee message createdAt completedAt archivedAt attachments";
+     "_id title color status dueDate chat creator assignee assignees message createdAt completedAt archivedAt attachments";
 
-     const mineRaw = await Task.find(
-       buildFilter({
-       $or: [{ assignee: userId }, { assignees: userId }],
-       })
-       )
-
+    // -------------------------
+    // ✅ Pendientes (mías)
+    // -------------------------
+    const mineRaw = await Task.find(
+      buildFilter({
+        $or: [{ assignee: userId }, { assignees: userId }],
+      })
+    )
       .populate("creator", "name email photoUrl")
       .populate("assignee", "name email photoUrl")
       .populate("chat", "type title")
       .select(selectFields)
       .lean();
 
-     const assignedRaw = await Task.find(
-       buildFilter({
-       creator: userId,
-       assignee: { $ne: userId },
-       assignees: { $ne: userId },
-       })
-       )
-
+    // -------------------------
+    // ✅ Solicitadas (creadas por mí, pero yo NO soy responsable)
+    // -------------------------
+    const assignedRaw = await Task.find(
+      buildFilter({
+        creator: userId,
+        $and: [{ assignee: { $ne: userId } }, { assignees: { $ne: userId } }],
+      })
+    )
       .populate("creator", "name email photoUrl")
       .populate("assignee", "name email photoUrl")
       .populate("chat", "type title")
@@ -114,9 +122,12 @@ router.get("/", auth, async (req, res, next) => {
       ...assignedRaw.map((t) => String(t._id)),
     ];
 
-    const allTaskIds = allTaskIdsStr
-      .filter(Boolean)
-      .map((id) => new mongoose.Types.ObjectId(id));
+    const allTaskIds = [];
+    for (const id of allTaskIdsStr) {
+      if (!id) continue;
+      if (!mongoose.Types.ObjectId.isValid(id)) continue;
+      allTaskIds.push(new mongoose.Types.ObjectId(id));
+    }
 
     const subtaskByTaskId = new Map(); // taskId -> { total, done }
 
@@ -154,7 +165,6 @@ router.get("/", auth, async (req, res, next) => {
         completedAt: t.completedAt || null,
         archivedAt: t.archivedAt || null,
 
-        // ✅ NUEVO: progreso subtareas (null si no hay)
         subtasks: st.total > 0 ? st : null,
 
         attachments: atts
@@ -193,6 +203,7 @@ router.get("/", auth, async (req, res, next) => {
           : null,
 
         messageId: t.message,
+        assignees: Array.isArray(t.assignees) ? t.assignees.map(String) : [],
       };
     }
 

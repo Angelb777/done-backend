@@ -350,7 +350,11 @@ router.delete("/:taskId/subtasks/:subtaskId", auth, async (req, res, next) => {
 
     if (!canEdit(task, userId)) return res.status(403).json({ error: "Forbidden" });
 
-    await TaskSubtask.deleteOne({ _id: subtaskId, task: taskId });
+    const r = await TaskSubtask.deleteOne({ _id: subtaskId, task: taskId });
+
+    if (!r || r.deletedCount !== 1) {
+      return res.status(404).json({ error: "Subtask not found" });
+    }
 
     return res.json({ ok: true, deletedSubtaskId: String(subtaskId) });
   } catch (e) {
