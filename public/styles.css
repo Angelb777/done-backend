@@ -1613,3 +1613,17 @@ body{
   width: 100%;
 }
 
+.unread{
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #b91c1c;       /* rojo */
+  color: #fff;
+  font-weight: 900;
+  font-size: 12px;
+  line-height: 1;
+}

@@ -243,12 +243,30 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     row.appendChild(left);
 
-    if(pending > 0){
+        const unread = Number(c.unreadCount || 0);
+
+    // Right side badges (pending + unread)
+    const right = document.createElement("div");
+    right.style.display = "flex";
+    right.style.gap = "8px";
+    right.style.alignItems = "center";
+
+    if (pending > 0) {
       const badge = document.createElement("div");
       badge.className = "badge";
       badge.textContent = `${pending} tareas`;
-      row.appendChild(badge);
+      right.appendChild(badge);
     }
+
+    if (unread > 0) {
+      const dot = document.createElement("div");
+      dot.className = "unread"; // CSS abajo
+      dot.title = `${unread} sin leer`;
+      dot.textContent = unread > 99 ? "99+" : String(unread); // si quieres solo punto, borra esta línea
+      right.appendChild(dot);
+    }
+
+    if (right.childNodes.length) row.appendChild(right);
 
     return row;
   }

@@ -273,9 +273,18 @@ function openableUrl(url){
   }
 
   let __lastReadMessageId = null;
+let __readInFlight = false;
 
-  async function markChatReadIfChanged(list) {
+async function markChatRead(lastMessageId) {
+  return API.api(`/chats/${encodeURIComponent(chatId)}/read`, {
+    method: "POST",
+    body: JSON.stringify({ lastMessageId }), // aunque el backend lo ignore, no molesta
+  });
+}
+
+async function markChatReadIfChanged(list) {
   if (!Array.isArray(list) || !list.length) return;
+  if (__readInFlight) return;
 
   const last = list[list.length - 1];
   const lastId = last._id || last.id;
@@ -283,20 +292,18 @@ function openableUrl(url){
 
   if (lastId === __lastReadMessageId) return;
 
-  __lastReadMessageId = lastId;
-
+  __readInFlight = true;
   try {
-    await markChatRead();
-  } catch (_) {}
+    await markChatRead(lastId);
+    // ✅ SOLO marcamos local si el backend respondió OK
+    __lastReadMessageId = lastId;
+  } catch (e) {
+    // ❌ si falla, NO actualizamos __lastReadMessageId para que reintente en el próximo poll
+    console.warn("markChatRead failed:", e);
+  } finally {
+    __readInFlight = false;
   }
-
-  async function markChatRead() {
-  return API.api(`/chats/${encodeURIComponent(chatId)}/read`, {
-    method: "POST",
-    body: JSON.stringify({}),
-  });
-  }
-
+}
 
   async function openTaskCommentsModal({ taskId, title, taskAttachments = [] }){
   if(!taskId) return;
