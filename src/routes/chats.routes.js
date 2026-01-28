@@ -58,7 +58,7 @@ router.get("/", auth, async (req, res, next) => {
     const chats = await Chat.find({ members: userId })
       .sort({ lastMessageAt: -1, updatedAt: -1 })
       .limit(100)
-      .select("_id type title photoUrl members lastMessageAt lastMessagePreview updatedAt")
+      .select("_id type title photoUrl members reads lastMessageAt lastMessagePreview updatedAt")
       .populate("members", "name email photoUrl status");
 
     // ✅ calcular pendingTasksCount por chat (PENDING y no archivadas)
@@ -72,6 +72,25 @@ router.get("/", auth, async (req, res, next) => {
         return count;
       })
     );
+
+    // ✅ calcular unreadCount por chat según reads.lastReadAt (y publishedAt de mensajes)
+const unreadCounts = await Promise.all(
+  chats.map(async (c) => {
+    const me = String(userId);
+
+    const readState = (c.reads || []).find((r) => String(r.user) === me);
+    const lastReadAt = readState?.lastReadAt ? new Date(readState.lastReadAt) : new Date(0);
+
+    const count = await Message.countDocuments({
+      chat: c._id,
+      publishedAt: { $exists: true, $gt: lastReadAt },
+      sender: { $ne: userId }, // no contar tus propios mensajes
+     });
+
+     return count;
+     })
+    );
+
 
     return res.json({
       chats: chats.map((c, idx) => {
@@ -120,7 +139,7 @@ router.get("/", auth, async (req, res, next) => {
 
             // ✅ AQUÍ
             pendingTasksCount,
-            unreadCount: 0,
+            unreadCount: unreadCounts[idx] || 0,
           };
         }
 
@@ -1053,6 +1072,37 @@ router.post("/:chatId/leave", auth, async (req, res, next) => {
     }
 
     return res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ✅ Marcar chat como leído
+// POST /chats/:chatId/read
+router.post("/:chatId/read", auth, async (req, res, next) => {
+  try {
+    const userId = String(req.user.id);
+    const { chatId } = req.params;
+
+    const chat = await Chat.findById(chatId).select("_id members reads");
+    if (!chat) return res.status(404).json({ error: "Chat not found" });
+
+    const members = (chat.members || []).map(String);
+    if (!members.includes(userId)) return res.status(403).json({ error: "Forbidden" });
+
+    const now = new Date();
+
+    // si ya existe readState, actualiza; si no, crea uno
+    const i = (chat.reads || []).findIndex((r) => String(r.user) === userId);
+    if (i >= 0) {
+      chat.reads[i].lastReadAt = now;
+    } else {
+      chat.reads.push({ user: userId, lastReadAt: now });
+    }
+
+    await chat.save();
+
+    return res.json({ ok: true, lastReadAt: now });
   } catch (err) {
     next(err);
   }
