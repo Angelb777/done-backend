@@ -162,7 +162,7 @@ const unreadCounts = await Promise.all(
 
           // ✅ AQUÍ
           pendingTasksCount,
-          unreadCount: 0,
+          unreadCount: unreadCounts[idx] || 0,
         };
       }),
     });

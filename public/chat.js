@@ -272,6 +272,32 @@ function openableUrl(url){
     };
   }
 
+  let __lastReadMessageId = null;
+
+  async function markChatReadIfChanged(list) {
+  if (!Array.isArray(list) || !list.length) return;
+
+  const last = list[list.length - 1];
+  const lastId = last._id || last.id;
+  if (!lastId) return;
+
+  if (lastId === __lastReadMessageId) return;
+
+  __lastReadMessageId = lastId;
+
+  try {
+    await markChatRead();
+  } catch (_) {}
+  }
+
+  async function markChatRead() {
+  return API.api(`/chats/${encodeURIComponent(chatId)}/read`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  }
+
+
   async function openTaskCommentsModal({ taskId, title, taskAttachments = [] }){
   if(!taskId) return;
 
@@ -1293,9 +1319,12 @@ function taskAttachmentsOfMessage(m){
       const raw = await getMessages();
       const list = Array.isArray(raw) ? raw : (raw.messages || []);
       // orden
-      list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      list.sort((a, b) => new Date(a.publishedAt || a.createdAt) - new Date(b.publishedAt || b.createdAt));
       elState.textContent = "";
       renderMessages(list);
+
+      await markChatReadIfChanged(list);
+
     } catch (e) {
       elState.textContent = e.message || String(e);
     }
