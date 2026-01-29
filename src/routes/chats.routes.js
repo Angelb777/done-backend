@@ -5,10 +5,11 @@ const User = require("../models/User");
 const { auth } = require("../middleware/auth");
 const { createChatSchema } = require("../utils/validators");
 const Task = require("../models/Task");
-const { MESSAGE_TYPES, TASK_STATUS } = require("../utils/constants");
 const TaskComment = require("../models/TaskComment"); // (lo usaremos luego para files, no rompe ahora)
 const { upload, toPublicUrl } = require("../utils/upload");
 const multer = require("multer");
+const ChatPref = require("../models/ChatPref");
+const { MESSAGE_TYPES, TASK_STATUS, CHAT_COLORS } = require("../utils/constants");
 
 
 const fs = require("fs");
@@ -61,6 +62,18 @@ router.get("/", auth, async (req, res, next) => {
       .select("_id type title photoUrl members reads lastMessageAt lastMessagePreview updatedAt")
       .populate("members", "name email photoUrl status");
 
+          // ✅ NUEVO: cargar preferencias de color por chat para este usuario
+    const chatIds = chats.map((c) => c._id);
+
+    const prefs = await ChatPref.find({
+      user: userId,
+      chat: { $in: chatIds },
+    }).select("chat color");
+
+    const prefMap = new Map(
+      prefs.map((p) => [String(p.chat), String(p.color || "white")])
+    );
+
     // ✅ calcular pendingTasksCount por chat (PENDING y no archivadas)
     const pendingCounts = await Promise.all(
       chats.map(async (c) => {
@@ -103,6 +116,8 @@ const unreadCounts = await Promise.all(
         }));
 
         const pendingTasksCount = pendingCounts[idx] || 0;
+                // ✅ NUEVO: color privado (por usuario)
+        const myColor = prefMap.get(String(c._id)) || "white";
 
         // DM
         if (c.type === "DM") {
@@ -140,6 +155,7 @@ const unreadCounts = await Promise.all(
             // ✅ AQUÍ
             pendingTasksCount,
             unreadCount: unreadCounts[idx] || 0,
+            myColor,
           };
         }
 
@@ -163,6 +179,7 @@ const unreadCounts = await Promise.all(
           // ✅ AQUÍ
           pendingTasksCount,
           unreadCount: unreadCounts[idx] || 0,
+          myColor,
         };
       }),
     });
@@ -398,6 +415,8 @@ if (!members.includes(userId)) return res.status(403).json({ error: "Forbidden" 
 
     // 3) Delete the chat itself
     await Chat.findByIdAndDelete(chatId);
+        // ✅ NUEVO: borrar prefs de color de ese chat
+    await ChatPref.deleteMany({ chat: chatId });
 
     // 4) Delete physical files in /uploads (best effort)
     // supports urls like: http://host/uploads/xxx OR /uploads/xxx
@@ -1136,5 +1155,38 @@ router.get("/:chatId/members", auth, async (req, res, next) => {
     next(e);
   }
 });
+
+// ✅ Set / change chat color (privado por usuario)
+// PATCH /chats/:chatId/color  { color: "red" }  o { color: "white" }
+router.patch("/:chatId/color", auth, async (req, res, next) => {
+  try {
+    const userId = String(req.user.id);
+    const { chatId } = req.params;
+
+    const colorRaw = String(req.body.color || "white").toLowerCase().trim();
+    const color = colorRaw || "white";
+
+    if (!CHAT_COLORS.includes(color)) {
+      return res.status(400).json({ error: "Invalid color" });
+    }
+
+    const chat = await Chat.findById(chatId).select("_id members");
+    if (!chat) return res.status(404).json({ error: "Chat not found" });
+
+    const members = (chat.members || []).map(String);
+    if (!members.includes(userId)) return res.status(403).json({ error: "Forbidden" });
+
+    await ChatPref.updateOne(
+      { chat: chatId, user: userId },
+      { $set: { color } },
+      { upsert: true }
+    );
+
+    return res.json({ ok: true, chatId: String(chatId), myColor: color });
+  } catch (err) {
+    next(err);
+  }
+});
+
 
 module.exports = router;
