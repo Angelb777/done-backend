@@ -7,7 +7,7 @@ const MESSAGE_TYPES = {
 
 const TASK_STATUS = {
   PENDING: "PENDING",
-  DONE: "DONE"
+  DONE: "DONE",
 };
 
 const TASK_COLORS = [
@@ -23,8 +23,12 @@ const TASK_COLORS = [
   "brown",
 ];
 
+// ✅ NUEVO: colores permitidos para chats (incluye "white")
+const CHAT_COLORS = ["white", ...TASK_COLORS];
+
 module.exports = {
   MESSAGE_TYPES,
   TASK_STATUS,
-  TASK_COLORS
+  TASK_COLORS,
+  CHAT_COLORS, // ✅ EXPORTAR
 };
