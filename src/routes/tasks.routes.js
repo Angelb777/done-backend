@@ -241,7 +241,7 @@ router.get("/:taskId/subtasks", auth, async (req, res, next) => {
     const mem = await assertMember(task, userId);
     if (!mem.ok) return res.status(mem.code).json({ error: mem.error });
 
-    const subtasks = await TaskSubtask.find({ task: taskId }).sort({ createdAt: 1 });
+    const subtasks = await TaskSubtask.find({ task: taskId }).sort({ order: 1, createdAt: 1 });
 
     return res.json({
       subtasks: subtasks.map((s) => ({
@@ -252,12 +252,22 @@ router.get("/:taskId/subtasks", auth, async (req, res, next) => {
         done: !!s.done,
         doneAt: s.doneAt || null,
         createdAt: s.createdAt,
+
+        color: s.color || "gray",
+        order: typeof s.order === "number" ? s.order : 0,
+        attachments: (s.attachments || []).map((a) => ({
+          url: a.url,
+          name: a.name,
+          mime: a.mime,
+          size: a.size,
+        })),
       })),
     });
   } catch (e) {
     next(e);
   }
 });
+
 
 router.post("/:taskId/subtasks", auth, async (req, res, next) => {
   try {
@@ -276,6 +286,12 @@ router.post("/:taskId/subtasks", auth, async (req, res, next) => {
     // Si quieres: solo quien puede editar la task puede crear subtareas
     if (!canEdit(task, userId)) return res.status(403).json({ error: "Forbidden" });
 
+    const last = await TaskSubtask.find({ task: taskId })
+    .sort({ order: -1, createdAt: -1 })
+    .limit(1);
+
+    const nextOrder = last.length ? (Number(last[0].order || 0) + 1) : 1;
+
     const sub = await TaskSubtask.create({
       task: taskId,
       chat: task.chat,
@@ -283,19 +299,31 @@ router.post("/:taskId/subtasks", auth, async (req, res, next) => {
       text,
       done: false,
       doneAt: null,
+      color: "gray",
+      order: nextOrder,
+      attachments: [],
     });
 
     return res.json({
-      subtask: {
-        id: String(sub._id),
-        taskId: String(sub.task),
-        chatId: String(sub.chat),
-        text: sub.text,
-        done: !!sub.done,
-        doneAt: sub.doneAt || null,
-        createdAt: sub.createdAt,
-      },
-    });
+  subtask: {
+    id: String(sub._id),
+    taskId: String(sub.task),
+    chatId: String(sub.chat),
+    text: sub.text,
+    done: !!sub.done,
+    doneAt: sub.doneAt || null,
+    createdAt: sub.createdAt,
+
+    color: sub.color || "gray",
+    order: typeof sub.order === "number" ? sub.order : 0,
+    attachments: (sub.attachments || []).map((a) => ({
+      url: a.url,
+      name: a.name,
+      mime: a.mime,
+      size: a.size,
+    })),
+  },
+});
   } catch (e) {
     next(e);
   }
@@ -322,16 +350,25 @@ router.patch("/:taskId/subtasks/:subtaskId/toggle", auth, async (req, res, next)
     await sub.save();
 
     return res.json({
-      subtask: {
-        id: String(sub._id),
-        taskId: String(sub.task),
-        chatId: String(sub.chat),
-        text: sub.text,
-        done: !!sub.done,
-        doneAt: sub.doneAt || null,
-        createdAt: sub.createdAt,
-      },
-    });
+  subtask: {
+    id: String(sub._id),
+    taskId: String(sub.task),
+    chatId: String(sub.chat),
+    text: sub.text,
+    done: !!sub.done,
+    doneAt: sub.doneAt || null,
+    createdAt: sub.createdAt,
+
+    color: sub.color || "gray",
+    order: typeof sub.order === "number" ? sub.order : 0,
+    attachments: (sub.attachments || []).map((a) => ({
+      url: a.url,
+      name: a.name,
+      mime: a.mime,
+      size: a.size,
+    })),
+  },
+});
   } catch (e) {
     next(e);
   }
@@ -678,5 +715,146 @@ router.patch("/:taskId", auth, async (req, res, next) => {
     next(e);
   }
 });
+
+router.patch("/:taskId/subtasks/reorder", auth, async (req, res, next) => {
+  try {
+    const userId = String(req.user.id);
+    const { taskId } = req.params;
+
+    const orderedIds = Array.isArray(req.body.orderedIds) ? req.body.orderedIds.map(String) : [];
+    if (!orderedIds.length) return res.status(400).json({ error: "orderedIds required" });
+
+    const task = await Task.findById(taskId).select("_id chat assignee assignees creator");
+    if (!task) return res.status(404).json({ error: "Task not found" });
+
+    const mem = await assertMember(task, userId);
+    if (!mem.ok) return res.status(mem.code).json({ error: mem.error });
+
+    if (!canEdit(task, userId)) return res.status(403).json({ error: "Forbidden" });
+
+    // Asegura que todas las subtareas pertenecen a esta task
+    const subs = await TaskSubtask.find({ task: taskId, _id: { $in: orderedIds } }).select("_id");
+    if (subs.length !== orderedIds.length) {
+      return res.status(400).json({ error: "Some subtasks do not belong to this task" });
+    }
+
+    // Guardar order = índice
+    const ops = orderedIds.map((id, idx) => ({
+      updateOne: {
+        filter: { _id: id, task: taskId },
+        update: { $set: { order: idx + 1 } },
+      },
+    }));
+
+    await TaskSubtask.bulkWrite(ops, { ordered: true });
+
+    return res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.patch("/:taskId/subtasks/:subtaskId/color", auth, async (req, res, next) => {
+  try {
+    const userId = String(req.user.id);
+    const { taskId, subtaskId } = req.params;
+
+    const color = String(req.body.color || "").trim();
+    if (!TASK_COLORS.includes(color)) return res.status(400).json({ error: "Invalid color" });
+
+    const task = await Task.findById(taskId).select("_id chat assignee assignees creator");
+    if (!task) return res.status(404).json({ error: "Task not found" });
+
+    const mem = await assertMember(task, userId);
+    if (!mem.ok) return res.status(mem.code).json({ error: mem.error });
+
+    if (!canEdit(task, userId)) return res.status(403).json({ error: "Forbidden" });
+
+    const sub = await TaskSubtask.findOne({ _id: subtaskId, task: taskId });
+    if (!sub) return res.status(404).json({ error: "Subtask not found" });
+
+    sub.color = color;
+    await sub.save();
+
+    return res.json({
+      ok: true,
+      subtask: { id: String(sub._id), color: sub.color },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post(
+  "/:taskId/subtasks/:subtaskId/files",
+  auth,
+  upload.array("files", 10),
+  async (req, res, next) => {
+    try {
+      const userId = String(req.user.id);
+      const { taskId, subtaskId } = req.params;
+
+      const files = req.files || [];
+      if (!Array.isArray(files) || files.length === 0) {
+        return res.status(400).json({ error: "files required" });
+      }
+
+      const task = await Task.findById(taskId).select("_id chat assignee assignees creator attachments");
+      if (!task) return res.status(404).json({ error: "Task not found" });
+
+      const mem = await assertMember(task, userId);
+      if (!mem.ok) return res.status(mem.code).json({ error: mem.error });
+
+      if (!canEdit(task, userId)) return res.status(403).json({ error: "Forbidden" });
+
+      const sub = await TaskSubtask.findOne({ _id: subtaskId, task: taskId });
+      if (!sub) return res.status(404).json({ error: "Subtask not found" });
+
+      const newAttachments = files.map((f) => ({
+        url: toPublicUrl(req, f.filename),
+        name: f.originalname || f.filename,
+        mime: f.mimetype || "application/octet-stream",
+        size: typeof f.size === "number" ? f.size : 0,
+        source: { type: "SUBTASK", subtaskId: String(sub._id) },
+      }));
+
+      // 1) Guardar en la subtarea (para previsualizar dentro de la subtarea)
+      sub.attachments = [...(sub.attachments || []), ...newAttachments];
+      await sub.save();
+
+      // 2) Copiar también en la tarea (para que salga en pestaña “Tareas” como adjunto general)
+      //    (Si quieres evitar duplicados por url, lo puedes filtrar, pero así ya funciona.)
+      task.attachments = [...(task.attachments || []), ...newAttachments.map(a => ({
+        url: a.url, name: a.name, mime: a.mime, size: a.size
+      }))];
+      await task.save();
+
+      return res.json({
+        ok: true,
+        subtask: {
+          id: String(sub._id),
+          attachments: (sub.attachments || []).map((a) => ({
+            url: a.url,
+            name: a.name,
+            mime: a.mime,
+            size: a.size,
+          })),
+        },
+        task: {
+          id: String(task._id),
+          attachments: (task.attachments || []).map((a) => ({
+            url: a.url,
+            name: a.name,
+            mime: a.mime,
+            size: a.size,
+          })),
+        },
+      });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
 
 module.exports = router;
