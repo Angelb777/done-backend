@@ -19,6 +19,9 @@ const adminRoutes = require("./routes/admin.routes");
 // ✅ Firebase auth endpoint
 const authFirebaseRoutes = require("./routes/auth_firebase");
 
+// ✅ DEV PUSH ROUTES (nuevo)
+const devPushRoutes = require("./routes/dev_push.routes");
+
 const app = express();
 
 /**
@@ -77,10 +80,13 @@ app.use("/messages", messagesRoutes); // Flutter: /messages/send /upload /task/s
 
 app.use("/dashboard", dashboardRoutes);
 app.use("/dev", devRoutes);
+
+// ✅ DEV PUSH: GET /dev-push/my-tokens  +  POST /dev-push/push-me
+app.use("/dev-push", devPushRoutes);
+
 app.use("/tasks", tasksRoutes);
 app.use("/me", meRoutes);
 app.use("/admin", adminRoutes);
-
 
 // ---------------------------
 // WEB ROUTES (bonitas)
