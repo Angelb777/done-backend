@@ -16,8 +16,8 @@ const tasksRoutes = require("./routes/tasks.routes");
 const meRoutes = require("./routes/me.routes");
 const adminRoutes = require("./routes/admin.routes");
 
-// ✅ NUEVO: Firebase auth endpoint (/auth/firebase)
-const authFirebaseRoutes = require("./routes/auth.firebase.routes");
+// ✅ Firebase auth endpoint
+const authFirebaseRoutes = require("./routes/auth_firebase");
 
 const app = express();
 
@@ -64,7 +64,7 @@ app.get("/health", (req, res) => res.json({ ok: true }));
 // API ROUTES
 // ---------------------------
 
-// ✅ NUEVO: expone POST /auth/firebase
+// ✅ expone POST /auth/firebase (según tu router)
 app.use("/", authFirebaseRoutes);
 
 app.use("/auth", authRoutes);
