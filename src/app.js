@@ -22,6 +22,10 @@ const authFirebaseRoutes = require("./routes/auth_firebase");
 // ✅ DEV PUSH ROUTES (nuevo)
 const devPushRoutes = require("./routes/dev_push.routes");
 
+// ✅ DEV MERGE ROUTES (nuevo)
+const devMergeRoutes = require("./routes/dev_merge.routes");
+
+
 const app = express();
 
 /**
@@ -83,6 +87,9 @@ app.use("/dev", devRoutes);
 
 // ✅ DEV PUSH: GET /dev-push/my-tokens  +  POST /dev-push/push-me
 app.use("/dev-push", devPushRoutes);
+
+// ✅ DEV MERGE: GET /dev-merge/merge?fromEmail=...&toEmail=...&key=...
+app.use("/dev-merge", devMergeRoutes);
 
 app.use("/tasks", tasksRoutes);
 app.use("/me", meRoutes);
