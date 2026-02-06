@@ -7,7 +7,7 @@ const jwt = require("jsonwebtoken");
 const { initFirebaseAdmin } = require("../config/firebase_admin");
 const firebaseAdmin = initFirebaseAdmin();
 
-// ✅ Tu modelo de usuario (ajusta SOLO si tu archivo se llama distinto)
+// ✅ Tu modelo de usuario
 const User = require("../models/User");
 
 function signToken(payload) {
@@ -26,43 +26,79 @@ router.post("/auth/firebase", async (req, res) => {
     // 1) Verificar token Firebase
     const decoded = await firebaseAdmin.auth().verifyIdToken(idToken);
 
+    const firebaseUid = decoded.uid || "";
     const email = (decoded.email || "").toLowerCase().trim();
     const name = decoded.name || decoded.displayName || "Usuario";
+    const photoUrl = decoded.picture || "";
 
-    if (!email) return res.status(400).json({ error: "No email in Firebase token" });
+    if (!email) {
+      return res.status(400).json({ error: "No email in Firebase token" });
+    }
 
-    // 2) Buscar/crear usuario en BD (SIN password)
+    // 2) Buscar/crear usuario en BD
     let user = await User.findOne({ email });
 
     if (!user) {
       user = await User.create({
         email,
         name,
-        authProvider: "google", // si no tienes este campo en el schema, bórralo
-        passwordHash: "",       // por si tu schema lo tiene
+        photoUrl,
+        authProvider: "google",
+        firebaseUid,
+        // passwordHash NO hace falta, tu schema ya lo permite (default "")
       });
     } else {
-      // Si quieres actualizar nombre/foto si vienen de Google (opcional)
-      if (!user.name || user.name === "Usuario") {
-        user.name = name;
-        await user.save();
+      // Asegura provider y firebaseUid (por si existía de antes)
+      let changed = false;
+
+      if (user.authProvider !== "google") {
+        user.authProvider = "google";
+        changed = true;
       }
+
+      if (!user.firebaseUid && firebaseUid) {
+        user.firebaseUid = firebaseUid;
+        changed = true;
+      }
+
+      if ((!user.name || user.name === "Usuario") && name && name !== "Usuario") {
+        user.name = name;
+        changed = true;
+      }
+
+      if ((!user.photoUrl || user.photoUrl === "") && photoUrl) {
+        user.photoUrl = photoUrl;
+        changed = true;
+      }
+
+      if (changed) await user.save();
     }
 
     // 3) Firmar TU JWT
-    const token = signToken({ userId: user._id.toString() });
+    const token = signToken({
+      userId: user._id.toString(),
+      // opcional: role si lo usas en frontend
+      role: user.role,
+    });
 
     return res.json({ token });
   } catch (e) {
-    // Si falla verifyIdToken => 401. Si falla otra cosa => 500.
     const msg = String(e && e.message ? e.message : e);
+
+    // 👇 Esto te da la pista REAL en Render logs
+    console.log("🔥 /auth/firebase FAILED:", msg);
+
+    // 401 solo para fallos típicos de verifyIdToken
     const isAuthError =
       msg.includes("Firebase ID token") ||
       msg.includes("auth/") ||
-      msg.includes("verifyIdToken");
+      msg.includes("verifyIdToken") ||
+      msg.includes("token") ||
+      msg.includes("audience") ||
+      msg.includes("expired");
 
     return res.status(isAuthError ? 401 : 500).json({
-      error: isAuthError ? "Invalid Firebase token" : "Server error",
+      error: isAuthError ? "Invalid token" : "Server error",
       details: msg,
     });
   }

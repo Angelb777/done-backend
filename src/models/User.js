@@ -14,13 +14,28 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // ✅ IMPORTANTE:
-    // Para usuarios que entran con Google/Firebase NO hay password.
-    // Por eso NO puede ser required:true.
+    // ✅ Solo requerido si es login normal (email/pass)
     passwordHash: {
       type: String,
-      required: false,
+      required: function () {
+        return (this.authProvider || "local") === "local";
+      },
       default: "",
+    },
+
+    // ✅ Nuevo: de dónde viene el login
+    authProvider: {
+      type: String,
+      enum: ["local", "google"],
+      default: "local",
+      index: true,
+    },
+
+    // opcional pero útil: uid firebase para linkear
+    firebaseUid: {
+      type: String,
+      default: "",
+      index: true,
     },
 
     // =========================
@@ -33,28 +48,15 @@ const userSchema = new mongoose.Schema(
       maxlength: 50,
     },
 
-    // ya lo tenías
-    photoUrl: {
-      type: String,
-      default: "",
-    },
+    photoUrl: { type: String, default: "" },
 
-    // ya lo tenías
-    status: {
-      type: String,
-      default: "",
-      trim: true,
-      maxlength: 80,
-    },
+    status: { type: String, default: "", trim: true, maxlength: 80 },
 
     taskOrder: {
       pending: [{ type: String, default: [] }],
       requested: [{ type: String, default: [] }],
     },
 
-    // =========================
-    // ROLES / PERMISOS (NUEVO)
-    // =========================
     role: {
       type: String,
       enum: ["user", "admin"],
@@ -62,14 +64,9 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
-// ======================================================
-// RESPUESTA PÚBLICA (NUNCA passwordHash)
-// ======================================================
 userSchema.methods.toPublic = function () {
   return {
     _id: this._id,
@@ -77,7 +74,8 @@ userSchema.methods.toPublic = function () {
     name: this.name,
     photoUrl: this.photoUrl,
     status: this.status,
-    role: this.role, // 👈 NUEVO
+    role: this.role,
+    authProvider: this.authProvider,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
   };
