@@ -8,6 +8,9 @@ node_modules/
 # uploads locales
 uploads/
 
+# Firebase Admin SDK (🔥 MUY IMPORTANTE)
+**/*firebase-adminsdk*.json
+
 # OS / editor
 .DS_Store
 Thumbs.db
