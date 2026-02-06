@@ -14,9 +14,13 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // ✅ IMPORTANTE:
+    // Para usuarios que entran con Google/Firebase NO hay password.
+    // Por eso NO puede ser required:true.
     passwordHash: {
       type: String,
-      required: true,
+      required: false,
+      default: "",
     },
 
     // =========================
@@ -42,6 +46,7 @@ const userSchema = new mongoose.Schema(
       trim: true,
       maxlength: 80,
     },
+
     taskOrder: {
       pending: [{ type: String, default: [] }],
       requested: [{ type: String, default: [] }],
@@ -72,7 +77,7 @@ userSchema.methods.toPublic = function () {
     name: this.name,
     photoUrl: this.photoUrl,
     status: this.status,
-    role: this.role,          // 👈 NUEVO
+    role: this.role, // 👈 NUEVO
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
   };
