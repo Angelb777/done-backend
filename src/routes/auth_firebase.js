@@ -1,34 +1,50 @@
 // src/routes/auth_firebase.js
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const admin = require('../config/firebase_admin');
 
-// TODO: ajusta estas importaciones a tu proyecto real
-// Si ya tienes un user model y una función para firmar JWT, usa las tuyas.
-const User = require('../models/User');           // <-- cámbialo si tu ruta/modelo es otro
-const { signJwt } = require('../utils/jwt');      // <-- cámbialo si tu jwt está en otro sitio
+// ✅ Firebase Admin (nuevo init por env var)
+const { initFirebaseAdmin } = require("../config/firebase_admin");
+const firebaseAdmin = initFirebaseAdmin();
 
-router.post('/auth/firebase', async (req, res) => {
+// ✅ AJUSTA ESTAS 2 IMPORTACIONES A TU PROYECTO REAL
+const User = require("../models/User");      // <-- cambia si tu modelo está en otro path
+const { signJwt } = require("../utils/jwt"); // <-- cambia si tu función JWT está en otro path
+
+router.post("/auth/firebase", async (req, res) => {
   try {
-    const { idToken } = req.body;
-    if (!idToken) return res.status(400).json({ error: 'Missing idToken' });
+    const { idToken } = req.body || {};
+    if (!idToken) return res.status(400).json({ error: "Missing idToken" });
 
     // 1) Verificar token de Google/Firebase
-    const decoded = await admin.auth().verifyIdToken(idToken);
+    const decoded = await firebaseAdmin.auth().verifyIdToken(idToken);
 
-    const email = (decoded.email || '').toLowerCase().trim();
-    const name = decoded.name || 'Usuario';
-    if (!email) return res.status(400).json({ error: 'No email in Firebase token' });
+    const email = (decoded.email || "").toLowerCase().trim();
+    const name = decoded.name || decoded.displayName || "Usuario";
+
+    if (!email) {
+      return res.status(400).json({ error: "No email in Firebase token" });
+    }
 
     // 2) Buscar/crear usuario en tu BD
     let user = await User.findOne({ email });
+
     if (!user) {
       user = await User.create({
         name,
         email,
-        // NO password (viene de Google)
-        authProvider: 'google',
+        authProvider: "google",
       });
+    } else {
+      // Opcional: si el usuario ya existe sin provider, lo marcamos
+      if (!user.authProvider) {
+        user.authProvider = "google";
+        await user.save();
+      }
+      // Opcional: si estaba sin nombre
+      if ((!user.name || user.name === "Usuario") && name && name !== "Usuario") {
+        user.name = name;
+        await user.save();
+      }
     }
 
     // 3) Crear TU JWT (igual que en /auth/login)
@@ -36,7 +52,10 @@ router.post('/auth/firebase', async (req, res) => {
 
     return res.json({ token });
   } catch (e) {
-    return res.status(401).json({ error: 'Invalid Firebase token', details: String(e) });
+    return res.status(401).json({
+      error: "Invalid Firebase token",
+      details: String(e && e.message ? e.message : e),
+    });
   }
 });
 
