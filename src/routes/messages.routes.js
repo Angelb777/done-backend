@@ -461,6 +461,26 @@ router.post("/chats/:chatId/messages", auth, async (req, res, next) => {
       { $set: { lastMessageAt: msg.publishedAt, lastMessagePreview: text } }
     );
 
+    // ✅ PUSH a los demás miembros (menos el que envía)
+const others = (chat.members || [])
+  .map(String)
+  .filter((id) => id !== String(userId));
+
+const title = chat.title ? String(chat.title) : (senderName || "DONE");
+const body = text || "Mensaje";
+
+sendPushToUsers({
+  userIds: others,
+  title,
+  body,
+  data: {
+    chatId: String(chat._id),
+    messageId: String(msg._id),
+    type: "CHAT_MESSAGE",
+  },
+}).catch((e) => console.log("🔥 push error:", e?.message || e));
+
+
     return res.json({
       ok: true,
       message: {
@@ -481,77 +501,106 @@ router.post("/chats/:chatId/messages", auth, async (req, res, next) => {
 
 // POST /chats/:chatId/messages/files  (multipart)
 // fields: text (opcional) + files[]
-router.post("/chats/:chatId/messages/files", auth, upload.array("files", 8), async (req, res, next) => {
-  try {
-    const userId = req.user.id;
-    const chatId = req.params.chatId;
-    const text = String(req.body.text || "").trim();
+router.post(
+  "/chats/:chatId/messages/files",
+  auth,
+  upload.array("files", 8),
+  async (req, res, next) => {
+    try {
+      const userId = req.user.id;
+      const chatId = req.params.chatId;
+      const text = String(req.body.text || "").trim();
 
-    const chat = await Chat.findById(chatId);
-    if (!chat) return res.status(404).json({ error: "Chat not found" });
-    if (!chat.members.map(String).includes(String(userId))) {
-      return res.status(403).json({ error: "Forbidden" });
+      const chat = await Chat.findById(chatId);
+      if (!chat) return res.status(404).json({ error: "Chat not found" });
+      if (!chat.members.map(String).includes(String(userId))) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const me = await User.findById(userId).select("name email");
+      const senderName = me?.name || me?.email || "Usuario";
+
+      const files = req.files || [];
+      if (!files.length && !text) {
+        return res.status(400).json({ error: "Sin texto ni adjuntos" });
+      }
+
+      const atts = files.map((f) => {
+        const url = toPublicUrl(req, f.filename);
+        return {
+          url,
+          name: f.originalname || f.filename,
+          mime: f.mimetype || "application/octet-stream",
+          size: typeof f.size === "number" ? f.size : 0,
+        };
+      });
+
+      const msg = await Message.create({
+        chat: chatId,
+        sender: userId,
+        senderName,
+        type: atts.some((a) => isImageMime(a.mime)) ? MESSAGE_TYPES.IMAGE : MESSAGE_TYPES.FILE,
+        text: text || null,
+
+        imageUrl: null,
+        attachment: null,
+        attachments: atts,
+
+        isScheduled: false,
+        scheduledFor: null,
+        publishedAt: new Date(),
+      });
+
+      const preview = text
+        ? `📎 ${text}`
+        : msg.type === MESSAGE_TYPES.IMAGE
+          ? "🖼️ Foto"
+          : "📎 Archivo";
+
+      await Chat.updateOne(
+        { _id: chatId },
+        { $set: { lastMessageAt: msg.publishedAt, lastMessagePreview: preview } }
+      );
+
+      // ✅ PUSH a los demás miembros (menos el que envía)
+      const others = (chat.members || [])
+        .map(String)
+        .filter((id) => id !== String(userId));
+
+      const title = chat.title ? String(chat.title) : (senderName || "DONE");
+      const body = preview || "📎 Archivo";
+
+      sendPushToUsers({
+        userIds: others,
+        title,
+        body,
+        data: {
+          chatId: String(chat._id),
+          messageId: String(msg._id),
+          type: "CHAT_FILE",
+        },
+      }).catch((e) => console.log("🔥 push error:", e?.message || e));
+
+      return res.json({
+        ok: true,
+        message: {
+          id: msg._id,
+          chatId: String(msg.chat),
+          type: msg.type,
+          text: msg.text || "",
+          imageUrl: null,
+          attachment: null,
+          attachments: buildAttachments(msg),
+          createdAt: msg.publishedAt,
+          senderId: String(userId),
+          senderName: msg.senderName,
+        },
+      });
+    } catch (err) {
+      next(err);
     }
-    const me = await User.findById(userId).select("name email");
-    const senderName = me?.name || me?.email || "Usuario";
-
-
-    const files = req.files || [];
-    if (!files.length && !text) return res.status(400).json({ error: "Sin texto ni adjuntos" });
-
-    const atts = files.map((f) => {
-  const url = toPublicUrl(req, f.filename); // <- ahora relativo
-  return {
-    url,
-    name: f.originalname || f.filename,
-    mime: f.mimetype || "application/octet-stream",
-    size: typeof f.size === "number" ? f.size : 0,
-  };
-});
-
-const msg = await Message.create({
-  chat: chatId,
-  sender: userId,
-  senderName,
-  type: atts.some(a => isImageMime(a.mime)) ? MESSAGE_TYPES.IMAGE : MESSAGE_TYPES.FILE,
-  text: text || null,
-
-  // 👇 si quieres mantener legacy, ok, pero NO lo uses para render
-  imageUrl: null,        // <- yo lo quitaría ya
-  attachment: null,      // <- yo lo quitaría ya
-
-  attachments: atts,
-
-  isScheduled: false,
-  scheduledFor: null,
-  publishedAt: new Date(),
-});
-
-    const preview = text ? `📎 ${text}` : (msg.type === MESSAGE_TYPES.IMAGE ? "🖼️ Foto" : "📎 Archivo");
-    await Chat.updateOne(
-      { _id: chatId },
-      { $set: { lastMessageAt: msg.publishedAt, lastMessagePreview: preview } }
-    );
-
-    return res.json({
-  ok: true,
-  message: {
-    id: msg._id,
-    chatId: String(msg.chat),
-    type: msg.type,
-    text: msg.text || "",
-    imageUrl: null,                 // <- o quítalo del response
-    attachment: null,               // <- o quítalo del response
-    attachments: buildAttachments(msg),
-    createdAt: msg.publishedAt,
-    senderId: String(userId),
-    senderName: msg.senderName,
-  },
-});
-
-  } catch (err) {
-    next(err);
   }
-});
+);
+
 
 module.exports = router;
