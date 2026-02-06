@@ -22,7 +22,9 @@ async function auth(req, res, next) {
   try {
     const payload = verifyToken(token);
 
-    const user = await User.findById(payload.sub);
+    const userId = payload.sub || payload.userId || payload.id;
+    const user = await User.findById(userId);
+
     if (!user) return res.status(401).json({ error: "Invalid token" });
 
     // ✅ Mantener compatibilidad con tu código actual: req.user.id

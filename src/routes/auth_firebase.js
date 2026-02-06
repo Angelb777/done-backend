@@ -75,11 +75,15 @@ router.post("/auth/firebase", async (req, res) => {
     }
 
     // 3) Firmar TU JWT
-    const token = signToken({
-  id: user._id.toString(),       // ✅ lo que seguramente usa tu middleware actual
-  userId: user._id.toString(),   // ✅ lo dejamos también por compat
+    const uid = user._id.toString();
+
+const token = signToken({
+  sub: uid,        // ✅ CLAVE: tu middleware usa payload.sub
+  id: uid,         // (opcional) compat
+  userId: uid,     // (opcional) compat
   role: user.role,
 });
+
 
 
     return res.json({ token });
