@@ -63,6 +63,17 @@ const userSchema = new mongoose.Schema(
       default: "user",
       index: true,
     },
+
+    // =========================
+    // ✅ PUSH (FCM)
+    // =========================
+    // Guardamos varios tokens por usuario (móvil + web + tablet)
+    // y usamos $addToSet para que no se dupliquen.
+    fcmTokens: {
+      type: [String],
+      default: [],
+      index: true,
+    },
   },
   { timestamps: true }
 );

@@ -7,6 +7,8 @@ const { auth } = require("../middleware/auth");
 const { sendMessageSchema, updateTaskStatusSchema } = require("../utils/validators");
 const { MESSAGE_TYPES, TASK_STATUS } = require("../utils/constants");
 const User = require("../models/User");
+const { sendPushToUsers } = require("../utils/push");
+
 
 
 // ✅ Reutilizar upload centralizado
@@ -117,6 +119,32 @@ router.post("/send", auth, async (req, res, next) => {
         { $set: { lastMessageAt: msg.publishedAt, lastMessagePreview: preview } }
       );
     }
+
+    // ✅ PUSH a los demás miembros (menos el que envía)
+if (!isScheduled) {
+  const others = (chat.members || [])
+    .map(String)
+    .filter((id) => id !== String(userId));
+
+  const title = chat.title ? String(chat.title) : (senderName || "DONE");
+
+  const body =
+    type === MESSAGE_TYPES.TASK
+      ? `🧩 ${data.task?.title || "Nueva tarea"}`
+      : (data.text?.trim() || "Mensaje");
+
+  sendPushToUsers({
+    userIds: others,
+    title,
+    body,
+    data: {
+      chatId: String(chat._id),
+      messageId: String(msg._id),
+      type: "CHAT_MESSAGE",
+    },
+  }).catch((e) => console.log("🔥 push error:", e?.message || e));
+}
+
 
     return res.json({
   message: {
@@ -234,6 +262,25 @@ router.post("/upload", auth, upload.array("files", 8), async (req, res, next) =>
       { _id: chatId },
       { $set: { lastMessageAt: now, lastMessagePreview: preview } }
     );
+
+    // ✅ PUSH a los demás miembros (menos el que sube)
+const others = (chat.members || [])
+  .map(String)
+  .filter((id) => id !== String(userId));
+
+const title = chat.title ? String(chat.title) : (senderName || "DONE");
+
+const body = preview || "📎 Archivo";
+
+sendPushToUsers({
+  userIds: others,
+  title,
+  body,
+  data: {
+    chatId: String(chat._id),
+    type: "CHAT_FILE",
+  },
+}).catch((e) => console.log("🔥 push error:", e?.message || e));
 
     return res.json({
       messages: created.map((m) => ({

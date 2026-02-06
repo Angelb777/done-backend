@@ -135,5 +135,21 @@ router.patch("/task-order", auth, async (req, res, next) => {
   }
 });
 
+// ✅ POST /me/push-token  body: { token: "FCM_TOKEN" }
+router.post("/push-token", auth, async (req, res, next) => {
+  try {
+    const token = String(req.body?.token || "").trim();
+    if (!token) return res.status(400).json({ error: "Missing token" });
+
+    await User.updateOne(
+      { _id: req.user.id },
+      { $addToSet: { fcmTokens: token } } // no duplica
+    );
+
+    return res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+});
 
 module.exports = router;
