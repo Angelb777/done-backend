@@ -1,5 +1,14 @@
 const mongoose = require("mongoose");
 
+const taskGroupSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },          // id local/cliente
+    title: { type: String, required: true },       // 👈 usa "title" (Flutter)
+    taskIds: { type: [String], default: [] },      // ids de tareas dentro
+  },
+  { _id: false }
+);
+
 const userSchema = new mongoose.Schema(
   {
     // =========================
@@ -52,38 +61,17 @@ const userSchema = new mongoose.Schema(
 
     status: { type: String, default: "", trim: true, maxlength: 80 },
 
-    // ✅ orden de tareas (ya lo tienes)
+    // ✅ ORDEN de tareas por sección (array simple de strings)
     taskOrder: {
-      pending: [{ type: String, default: [] }],
-      requested: [{ type: String, default: [] }],
+      pending: { type: [String], default: [] },
+      requested: { type: [String], default: [] },
     },
 
-    // ✅ NUEVO: grupos de tareas por usuario (vista tipo carpetas)
-    // Estructura:
-    // taskGroups: { pending:[{id,name,taskIds,order}], requested:[...] }
+    // ✅ GRUPOS (carpetas) por sección
+    // - NO guardamos grupos con <2 tareas (el backend lo puede filtrar igual)
     taskGroups: {
-      pending: {
-        type: [
-          {
-            id: { type: String, required: true },
-            name: { type: String, required: true },
-            taskIds: { type: [String], default: [] },
-            order: { type: Number, default: 0 },
-          },
-        ],
-        default: [],
-      },
-      requested: {
-        type: [
-          {
-            id: { type: String, required: true },
-            name: { type: String, required: true },
-            taskIds: { type: [String], default: [] },
-            order: { type: Number, default: 0 },
-          },
-        ],
-        default: [],
-      },
+      pending: { type: [taskGroupSchema], default: [] },
+      requested: { type: [taskGroupSchema], default: [] },
     },
 
     role: {
@@ -114,7 +102,8 @@ userSchema.methods.toPublic = function () {
     status: this.status,
     role: this.role,
     authProvider: this.authProvider,
-    // Si NO quieres exponerlo aquí, bórralo y listo:
+    // (si no quieres exponerlo aquí, puedes quitarlo)
+    taskOrder: this.taskOrder || { pending: [], requested: [] },
     taskGroups: this.taskGroups || { pending: [], requested: [] },
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,

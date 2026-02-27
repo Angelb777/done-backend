@@ -1,3 +1,4 @@
+// routes/me.routes.js
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
@@ -64,7 +65,7 @@ router.get("/", auth, async (req, res, next) => {
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean);
 
-    if (adminList.includes(pub.email.toLowerCase())) pub.role = "admin";
+    if (adminList.includes(String(pub.email || "").toLowerCase())) pub.role = "admin";
 
     return res.json({ user: pub });
   } catch (err) {
@@ -100,6 +101,7 @@ router.post("/photo", auth, upload.single("photo"), async (req, res, next) => {
     const photoUrl = `/uploads/${req.file.filename}`;
 
     const user = await User.findByIdAndUpdate(userId, { photoUrl }, { new: true });
+    if (!user) return res.status(404).json({ error: "User not found" });
 
     return res.json({ user: user.toPublic() });
   } catch (err) {
@@ -121,12 +123,10 @@ router.get("/task-order", auth, async (req, res, next) => {
 
 router.patch("/task-order", auth, async (req, res, next) => {
   try {
-    const section = String(req.body.section || "");
+    const section = safeSection(req.body.section);
     const ids = Array.isArray(req.body.ids) ? req.body.ids.map(String) : [];
 
-    if (!["pending", "requested"].includes(section)) {
-      return res.status(400).json({ error: "Invalid section" });
-    }
+    if (!section) return res.status(400).json({ error: "Invalid section" });
 
     const updated = await User.findByIdAndUpdate(
       req.user.id,
@@ -134,14 +134,14 @@ router.patch("/task-order", auth, async (req, res, next) => {
       { new: true, select: "taskOrder" }
     );
 
-    return res.json({ ok: true, taskOrder: updated.taskOrder });
+    return res.json({ ok: true, taskOrder: updated?.taskOrder || { pending: [], requested: [] } });
   } catch (e) {
     next(e);
   }
 });
 
 // ===============================
-// ✅ TASK GROUPS (NUEVO)
+// ✅ TASK GROUPS (NUEVO) — FIXED
 // ===============================
 
 // GET /me/task-groups
@@ -157,7 +157,7 @@ router.get("/task-groups", auth, async (req, res, next) => {
 });
 
 // PATCH /me/task-groups
-// body: { section: "pending"|"requested", groups: [{id,name,taskIds,order}] }
+// body: { section: "pending"|"requested", groups: [{ id, title, taskIds }] }
 router.patch("/task-groups", auth, async (req, res, next) => {
   try {
     const section = safeSection(req.body.section);
@@ -166,14 +166,21 @@ router.patch("/task-groups", auth, async (req, res, next) => {
     if (!section) return res.status(400).json({ error: "Invalid section" });
     if (!groups) return res.status(400).json({ error: "groups required" });
 
+    // ✅ IMPORTANTES:
+    // - usamos `title` (no `name`) para que case con Flutter (group.title)
+    // - nunca guardamos carpetas con <2 tareas
+    // - dedupe de taskIds por seguridad
     const clean = groups
-      .map((g) => ({
-        id: String(g.id || ""),
-        name: String(g.name || "").trim().slice(0, 40),
-        taskIds: Array.isArray(g.taskIds) ? g.taskIds.map(String) : [],
-        order: typeof g.order === "number" ? g.order : 0,
-      }))
-      .filter((g) => g.id && g.name);
+      .map((g) => {
+        const id = String(g?.id || "").trim();
+        const title = String(g?.title || "").trim().slice(0, 40);
+
+        const rawIds = Array.isArray(g?.taskIds) ? g.taskIds : [];
+        const taskIds = [...new Set(rawIds.map(String).map((s) => s.trim()).filter(Boolean))];
+
+        return { id, title, taskIds };
+      })
+      .filter((g) => g.id && g.title && g.taskIds.length >= 2);
 
     const updated = await User.findByIdAndUpdate(
       req.user.id,
@@ -197,7 +204,6 @@ router.post("/push-token", auth, async (req, res, next) => {
     if (!token) return res.status(400).json({ error: "Missing token" });
 
     await User.updateOne({ _id: req.user.id }, { $addToSet: { fcmTokens: token } }); // no duplica
-
     return res.json({ ok: true });
   } catch (e) {
     next(e);
