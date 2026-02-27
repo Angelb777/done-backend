@@ -180,7 +180,7 @@ router.patch("/task-groups", auth, async (req, res, next) => {
 
         return { id, title, taskIds };
       })
-      .filter((g) => g.id && g.title && g.taskIds.length >= 2);
+      .filter((g) => g.id && g.title && Array.isArray(g.taskIds));
 
     const updated = await User.findByIdAndUpdate(
       req.user.id,
