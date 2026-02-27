@@ -52,9 +52,38 @@ const userSchema = new mongoose.Schema(
 
     status: { type: String, default: "", trim: true, maxlength: 80 },
 
+    // ✅ orden de tareas (ya lo tienes)
     taskOrder: {
       pending: [{ type: String, default: [] }],
       requested: [{ type: String, default: [] }],
+    },
+
+    // ✅ NUEVO: grupos de tareas por usuario (vista tipo carpetas)
+    // Estructura:
+    // taskGroups: { pending:[{id,name,taskIds,order}], requested:[...] }
+    taskGroups: {
+      pending: {
+        type: [
+          {
+            id: { type: String, required: true },
+            name: { type: String, required: true },
+            taskIds: { type: [String], default: [] },
+            order: { type: Number, default: 0 },
+          },
+        ],
+        default: [],
+      },
+      requested: {
+        type: [
+          {
+            id: { type: String, required: true },
+            name: { type: String, required: true },
+            taskIds: { type: [String], default: [] },
+            order: { type: Number, default: 0 },
+          },
+        ],
+        default: [],
+      },
     },
 
     role: {
@@ -67,8 +96,6 @@ const userSchema = new mongoose.Schema(
     // =========================
     // ✅ PUSH (FCM)
     // =========================
-    // Guardamos varios tokens por usuario (móvil + web + tablet)
-    // y usamos $addToSet para que no se dupliquen.
     fcmTokens: {
       type: [String],
       default: [],
@@ -87,6 +114,8 @@ userSchema.methods.toPublic = function () {
     status: this.status,
     role: this.role,
     authProvider: this.authProvider,
+    // Si NO quieres exponerlo aquí, bórralo y listo:
+    taskGroups: this.taskGroups || { pending: [], requested: [] },
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
   };

@@ -9,6 +9,15 @@ const router = express.Router();
 
 console.log("✅ me.routes loaded");
 
+// ===============================
+// Helpers
+// ===============================
+function safeSection(s) {
+  const section = String(s || "");
+  if (!["pending", "requested"].includes(section)) return null;
+  return section;
+}
+
 // ---------- Multer setup ----------
 const uploadDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadDir)) {
@@ -40,7 +49,6 @@ const upload = multer({
 });
 
 // ---------- GET /me ----------
-// ---------- GET /me ----------
 router.get("/", auth, async (req, res, next) => {
   try {
     const userId = req.user.id;
@@ -63,7 +71,6 @@ router.get("/", auth, async (req, res, next) => {
     next(err);
   }
 });
-
 
 // ---------- PATCH /me ----------
 router.patch("/", auth, async (req, res, next) => {
@@ -92,11 +99,7 @@ router.post("/photo", auth, upload.single("photo"), async (req, res, next) => {
     const userId = req.user.id;
     const photoUrl = `/uploads/${req.file.filename}`;
 
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { photoUrl },
-      { new: true }
-    );
+    const user = await User.findByIdAndUpdate(userId, { photoUrl }, { new: true });
 
     return res.json({ user: user.toPublic() });
   } catch (err) {
@@ -104,6 +107,9 @@ router.post("/photo", auth, upload.single("photo"), async (req, res, next) => {
   }
 });
 
+// ===============================
+// ✅ TASK ORDER (ya lo tenías)
+// ===============================
 router.get("/task-order", auth, async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id).select("taskOrder");
@@ -112,7 +118,6 @@ router.get("/task-order", auth, async (req, res, next) => {
     next(e);
   }
 });
-
 
 router.patch("/task-order", auth, async (req, res, next) => {
   try {
@@ -135,16 +140,63 @@ router.patch("/task-order", auth, async (req, res, next) => {
   }
 });
 
+// ===============================
+// ✅ TASK GROUPS (NUEVO)
+// ===============================
+
+// GET /me/task-groups
+router.get("/task-groups", auth, async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id).select("taskGroups");
+    return res.json({
+      taskGroups: user?.taskGroups || { pending: [], requested: [] },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// PATCH /me/task-groups
+// body: { section: "pending"|"requested", groups: [{id,name,taskIds,order}] }
+router.patch("/task-groups", auth, async (req, res, next) => {
+  try {
+    const section = safeSection(req.body.section);
+    const groups = Array.isArray(req.body.groups) ? req.body.groups : null;
+
+    if (!section) return res.status(400).json({ error: "Invalid section" });
+    if (!groups) return res.status(400).json({ error: "groups required" });
+
+    const clean = groups
+      .map((g) => ({
+        id: String(g.id || ""),
+        name: String(g.name || "").trim().slice(0, 40),
+        taskIds: Array.isArray(g.taskIds) ? g.taskIds.map(String) : [],
+        order: typeof g.order === "number" ? g.order : 0,
+      }))
+      .filter((g) => g.id && g.name);
+
+    const updated = await User.findByIdAndUpdate(
+      req.user.id,
+      { $set: { [`taskGroups.${section}`]: clean } },
+      { new: true, select: "taskGroups" }
+    );
+
+    return res.json({
+      ok: true,
+      taskGroups: updated?.taskGroups || { pending: [], requested: [] },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
 // ✅ POST /me/push-token  body: { token: "FCM_TOKEN" }
 router.post("/push-token", auth, async (req, res, next) => {
   try {
     const token = String(req.body?.token || "").trim();
     if (!token) return res.status(400).json({ error: "Missing token" });
 
-    await User.updateOne(
-      { _id: req.user.id },
-      { $addToSet: { fcmTokens: token } } // no duplica
-    );
+    await User.updateOne({ _id: req.user.id }, { $addToSet: { fcmTokens: token } }); // no duplica
 
     return res.json({ ok: true });
   } catch (e) {
