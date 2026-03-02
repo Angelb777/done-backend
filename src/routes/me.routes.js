@@ -141,7 +141,7 @@ router.patch("/task-order", auth, async (req, res, next) => {
 });
 
 // ===============================
-// ✅ TASK GROUPS (NUEVO) — FIXED
+// ✅ TASK GROUPS (FIX) — ahora guarda expanded
 // ===============================
 
 // GET /me/task-groups
@@ -157,7 +157,7 @@ router.get("/task-groups", auth, async (req, res, next) => {
 });
 
 // PATCH /me/task-groups
-// body: { section: "pending"|"requested", groups: [{ id, title, taskIds }] }
+// body: { section: "pending"|"requested", groups: [{ id, title, taskIds, expanded }] }
 router.patch("/task-groups", auth, async (req, res, next) => {
   try {
     const section = safeSection(req.body.section);
@@ -168,6 +168,7 @@ router.patch("/task-groups", auth, async (req, res, next) => {
 
     // ✅ IMPORTANTES:
     // - usamos `title` (no `name`) para que case con Flutter (group.title)
+    // - guardamos `expanded` para que NO se reabra en polls
     // - nunca guardamos carpetas con <2 tareas
     // - dedupe de taskIds por seguridad
     const clean = groups
@@ -178,7 +179,12 @@ router.patch("/task-groups", auth, async (req, res, next) => {
         const rawIds = Array.isArray(g?.taskIds) ? g.taskIds : [];
         const taskIds = [...new Set(rawIds.map(String).map((s) => s.trim()).filter(Boolean))];
 
-        return { id, title, taskIds };
+        // ✅ FIX: guardar expanded (si no viene, por defecto true)
+        // Nota: si llega "false" (boolean), lo respetamos.
+        // Si llega undefined/null, lo dejamos true para mantener "abierto por defecto".
+        const expanded = g?.expanded === false ? false : true;
+
+        return { id, title, taskIds, expanded };
       })
       .filter((g) => g.id && g.title && Array.isArray(g.taskIds));
 
