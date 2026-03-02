@@ -5,6 +5,10 @@ const taskGroupSchema = new mongoose.Schema(
     id: { type: String, required: true },          // id local/cliente
     title: { type: String, required: true },       // 👈 usa "title" (Flutter)
     taskIds: { type: [String], default: [] },      // ids de tareas dentro
+
+    // ✅ FIX: persistir si está expandida o colapsada
+    // Si no existe en documentos antiguos, por defecto será true.
+    expanded: { type: Boolean, default: true },
   },
   { _id: false }
 );
@@ -68,7 +72,6 @@ const userSchema = new mongoose.Schema(
     },
 
     // ✅ GRUPOS (carpetas) por sección
-    // - NO guardamos grupos con <2 tareas (el backend lo puede filtrar igual)
     taskGroups: {
       pending: { type: [taskGroupSchema], default: [] },
       requested: { type: [taskGroupSchema], default: [] },
@@ -94,6 +97,22 @@ const userSchema = new mongoose.Schema(
 );
 
 userSchema.methods.toPublic = function () {
+  // ✅ opcional: asegurar que expanded siempre sale definido
+  const normalizeGroups = (g) => {
+    const out = g || { pending: [], requested: [] };
+    const normList = (arr) =>
+      (Array.isArray(arr) ? arr : []).map((x) => ({
+        id: x.id,
+        title: x.title,
+        taskIds: x.taskIds || [],
+        expanded: x.expanded !== false, // si es false se respeta; si falta -> true
+      }));
+    return {
+      pending: normList(out.pending),
+      requested: normList(out.requested),
+    };
+  };
+
   return {
     _id: this._id,
     email: this.email,
@@ -102,9 +121,10 @@ userSchema.methods.toPublic = function () {
     status: this.status,
     role: this.role,
     authProvider: this.authProvider,
-    // (si no quieres exponerlo aquí, puedes quitarlo)
+
     taskOrder: this.taskOrder || { pending: [], requested: [] },
-    taskGroups: this.taskGroups || { pending: [], requested: [] },
+    taskGroups: normalizeGroups(this.taskGroups),
+
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
   };
