@@ -39,7 +39,7 @@ const taskSubtaskSchema = new mongoose.Schema(
       index: true,
     },
 
-    // ✅ NUEVO: tipo de nodo (ITEM normal o FOLDER carpeta)
+    // ✅ tipo de nodo (ITEM normal o FOLDER carpeta)
     type: {
       type: String,
       enum: ["ITEM", "FOLDER"],
@@ -47,7 +47,7 @@ const taskSubtaskSchema = new mongoose.Schema(
       index: true,
     },
 
-    // ✅ NUEVO: parentId (null => root, folderId => dentro de esa carpeta)
+    // ✅ parentId (null => root, folderId => dentro de esa carpeta)
     parentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "TaskSubtask",
@@ -55,25 +55,37 @@ const taskSubtaskSchema = new mongoose.Schema(
       index: true,
     },
 
-    // ✅ IMPORTANTE: mantenemos text required para compatibilidad.
+    // ✅ mantenemos text required para compatibilidad.
     // Para FOLDER, en routes lo setearás a "__FOLDER__" (o similar).
     text: { type: String, required: true, trim: true },
 
     done: { type: Boolean, default: false },
     doneAt: { type: Date, default: null },
 
-    // ✅ NUEVO: color subtarea / carpeta
+    // ✅ color subtarea / carpeta
     color: { type: String, default: "gray", enum: TASK_COLORS },
 
-    // ✅ NUEVO: orden persistente (por parentId)
+    // ✅ orden persistente (por parentId)
     order: { type: Number, default: 0, index: true },
 
-    // ✅ NUEVO: adjuntos subtarea
+    // ✅ adjuntos subtarea
     attachments: { type: [attachmentSchema], default: [] },
 
-    // ✅ NUEVO: campos de carpeta
-    // (solo aplican si type === "FOLDER")
-    title: { type: String, default: "" },
+    // ✅ campos de carpeta (solo aplican si type === "FOLDER")
+    title: {
+      type: String,
+      default: "",
+      trim: true,
+      validate: {
+        validator: function (v) {
+          // si es carpeta, debe tener título (evita folders vacíos por bugs de cliente)
+          if (this.type === "FOLDER") return typeof v === "string" && v.trim().length > 0;
+          return true;
+        },
+        message: "Folder title is required",
+      },
+    },
+
     collapsed: { type: Boolean, default: false },
   },
   { timestamps: true }

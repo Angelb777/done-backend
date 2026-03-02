@@ -90,6 +90,12 @@ function isHistoryTask(task) {
 // ✅ Helpers subtasks (DTO + orden por parent)
 // ----------------------------------------------------
 function toSubtaskDTO(s) {
+  const isFolder = String(s.type || "ITEM") === "FOLDER";
+
+  // ✅ Para Flutter: si es carpeta, el “texto” que pinta es el title
+  const folderTitle = (s.title || "").toString().trim();
+  const text = isFolder ? (folderTitle || "Carpeta") : (s.text || "");
+
   return {
     id: String(s._id),
     _id: String(s._id),
@@ -98,10 +104,10 @@ function toSubtaskDTO(s) {
 
     type: s.type || "ITEM",
     parentId: s.parentId ? String(s.parentId) : null,
-    title: s.title || "",
+    title: folderTitle,
     collapsed: !!s.collapsed,
 
-    text: s.text,
+    text,
     done: !!s.done,
     doneAt: s.doneAt || null,
     createdAt: s.createdAt,
@@ -131,6 +137,79 @@ async function assertFolderBelongs(taskId, folderId) {
   if (!f) return { ok: false, code: 404, error: "Folder not found" };
   if (String(f.type) !== "FOLDER") return { ok: false, code: 400, error: "parentId is not a folder" };
   return { ok: true, folder: f };
+}
+
+function orderSubtasksForClient(subtasks) {
+  // subtasks: docs ya traídos de Mongo
+  // Queremos: root en orden, y cada folder seguido de sus hijos (también en orden)
+  const byParent = new Map(); // parentId(string|null) => array
+  const keyOf = (p) => (p ? String(p) : "__root__");
+
+  for (const s of subtasks) {
+    const k = keyOf(s.parentId);
+    if (!byParent.has(k)) byParent.set(k, []);
+    byParent.get(k).push(s);
+  }
+
+  const sortArr = (arr) =>
+    arr.sort((a, b) => {
+      const oa = typeof a.order === "number" ? a.order : 0;
+      const ob = typeof b.order === "number" ? b.order : 0;
+      if (oa !== ob) return oa - ob;
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+
+  for (const [k, arr] of byParent.entries()) sortArr(arr);
+
+  const out = [];
+  const root = byParent.get("__root__") || [];
+
+  for (const node of root) {
+    out.push(node);
+
+    const isFolder = String(node.type) === "FOLDER";
+    if (isFolder) {
+      const kids = byParent.get(String(node._id)) || [];
+      for (const child of kids) out.push(child);
+    }
+  }
+
+  return out;
+}
+
+async function normalizeFolders(taskId) {
+  // Regla:
+  // - folder con 0 hijos => se borra
+  // - folder con 1 hijo => se “desagrupa” (hijo sube al parent del folder) y folder se borra
+  const folders = await TaskSubtask.find({ task: taskId, type: "FOLDER" })
+    .select("_id parentId order")
+    .sort({ parentId: 1, order: 1, createdAt: 1 });
+
+  for (const f of folders) {
+    const children = await TaskSubtask.find({ task: taskId, parentId: f._id })
+      .select("_id")
+      .sort({ order: 1, createdAt: 1 })
+      .limit(2);
+
+    if (children.length === 0) {
+      await TaskSubtask.deleteOne({ _id: f._id, task: taskId });
+      continue;
+    }
+
+    if (children.length === 1) {
+      const onlyChildId = children[0]._id;
+
+      const targetParent = f.parentId ? String(f.parentId) : null;
+      const baseOrder = await getNextOrder(taskId, targetParent);
+
+      await TaskSubtask.updateOne(
+        { _id: onlyChildId, task: taskId },
+        { $set: { parentId: targetParent ? targetParent : null, order: baseOrder } }
+      );
+
+      await TaskSubtask.deleteOne({ _id: f._id, task: taskId });
+    }
+  }
 }
 
 /**
@@ -289,12 +368,14 @@ router.get("/:taskId/subtasks", auth, async (req, res, next) => {
 
     // ✅ orden por parentId + order (y fallback createdAt)
     const subtasks = await TaskSubtask.find({ task: taskId }).sort({
-      parentId: 1,
-      order: 1,
-      createdAt: 1,
-    });
+  order: 1,
+  createdAt: 1,
+});
 
-    return res.json({ subtasks: subtasks.map(toSubtaskDTO) });
+// ✅ devuelve en orden “folder + hijos”
+const ordered = orderSubtasksForClient(subtasks);
+
+return res.json({ subtasks: ordered.map(toSubtaskDTO) });
   } catch (e) {
     next(e);
   }
@@ -345,6 +426,8 @@ router.post("/:taskId/subtasks", auth, async (req, res, next) => {
       title: "",
       collapsed: false,
     });
+
+    await normalizeFolders(taskId);
 
     return res.json({ subtask: toSubtaskDTO(sub) });
   } catch (e) {
@@ -489,6 +572,8 @@ router.patch("/:taskId/subtasks/move", auth, async (req, res, next) => {
 
     await TaskSubtask.bulkWrite(ops, { ordered: true });
 
+    await normalizeFolders(taskId);
+
     return res.json({ ok: true });
   } catch (e) {
     next(e);
@@ -559,6 +644,8 @@ router.post("/:taskId/subtasks/group", auth, async (req, res, next) => {
 
     await TaskSubtask.bulkWrite(moveOps, { ordered: true });
 
+    await normalizeFolders(taskId);
+
     return res.json({ ok: true, folder: toSubtaskDTO(folder) });
   } catch (e) {
     next(e);
@@ -601,6 +688,8 @@ router.post("/:taskId/subtasks/:folderId/ungroup", auth, async (req, res, next) 
 
     // borrar folder
     await TaskSubtask.deleteOne({ _id: folderId, task: taskId });
+
+    await normalizeFolders(taskId);
 
     return res.json({ ok: true });
   } catch (e) {
@@ -659,11 +748,14 @@ router.delete("/:taskId/subtasks/:subtaskId", auth, async (req, res, next) => {
       // ✅ si borras carpeta: borra hijos también (simple y consistente)
       await TaskSubtask.deleteMany({ task: taskId, parentId: sub._id });
       await TaskSubtask.deleteOne({ _id: subtaskId, task: taskId });
+      await normalizeFolders(taskId);
       return res.json({ ok: true, deletedFolderId: String(subtaskId) });
     }
 
     const r = await TaskSubtask.deleteOne({ _id: subtaskId, task: taskId });
     if (!r || r.deletedCount !== 1) return res.status(404).json({ error: "Subtask not found" });
+
+    await normalizeFolders(taskId);
 
     return res.json({ ok: true, deletedSubtaskId: String(subtaskId) });
   } catch (e) {
